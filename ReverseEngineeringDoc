@@ -1,0 +1,32 @@
+What they actually built — the real picture
+Screenshot 1 (App dashboard): The "Wakanda App" is a desktop application, not a browser extension. It shows your email, a green "MONTHLY ACCESS" badge, and "Expires in 9d" — all fetched live from their server using your session/key. Two tools: Wakanda Image and Wakanda Video.
+Screenshots 2 & 3 (Image + Video generation pages): Both tools are identical in UI — a dark canvas with "Start creating or drop media", a prompt bar at the bottom, and a model selector showing "Nano Banana 2 × 2". This is a codename for an AI model (almost certainly Flow.so's internal model naming — Flow calls their models things like this). The UI is a React/Vue single-page app bundled inside Electron.
+Screenshot 4 (Website dashboard): This is the control panel. It has: subscription status ("Monthly Access Plan", renewal Apr 01), Download Wakanda App (APK for Android + EXE for Windows), "Manage billing flow", "Switch tiers", and sidebar with Dashboard / My Profile / View Plans / Open Tools.
+Screenshot 5 (Profile + API License Key): This is the most revealing screen. Your profile shows: Identity (username), Endpoint (email), and an API LICENSE KEY (blurred). This key is the bridge between the website and the app.
+
+The API License Key — how it all connects
+This is the entire business model in one mechanism:
+When you pay, their server generates a unique key tied to your account. The Wakanda App reads this key (either you paste it on first launch, or the app auto-authenticates using your login session). Every generation request the app sends to their backend includes this key. The backend checks: is this key valid? Is the subscription active? If yes, it forwards your prompt to the actual AI service (Flow.so) using their own master credentials. If your subscription expires, the key stops working and the app locks you out — that's how "Expires in 9d" is enforced.
+
+To replicate this exactly, you need to build:
+Part 1 — Website (Laravel/Node.js):
+
+Register/login with Google OAuth
+Razorpay payment → webhook → activate subscription in DB
+Auto-generate a unique API License Key per user on payment
+Dashboard showing: subscription status, expiry date, download buttons, the API key
+Backend API that validates keys and proxies AI requests
+
+Part 2 — Desktop App (Electron.js):
+
+On first launch: login screen or key entry screen
+Fetches subscription metadata (email, plan, expiry) from your backend using the key
+Image generation page and Video generation page
+Sends prompts to your backend (not directly to AI service)
+Shows expiry countdown in the header
+
+Part 3 — Backend API (the bridge):
+
+POST /api/validate-key — checks key, returns user+subscription info
+POST /api/generate/image — validates key, calls Flow/Veo/fal.ai, returns result
+POST /api/generate/video — same pattern
