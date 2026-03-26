@@ -638,3 +638,7 @@ IMPORTANT NOTES FOR DEVELOPER
 - Set hard per-user daily generation limits to prevent API cost blowout.
   Suggested defaults: 20 images/day, 5 videos/day regardless of total credits.
 ==============================================================
+
+What to do with this prompt
+Give it exactly as-is to a developer or paste it into Cursor, Claude Code (claude in terminal), or any AI coding assistant and say: "Build this exactly as specified. Start with Phase 1 — the Laravel website and database migrations."
+The three things to sort out before writing a single line of code: buy your code signing certificate (~₹18,000/year from Sectigo), set up a Vertex AI billing account, and register a Razorpay business account. Everything else follows from those three.
