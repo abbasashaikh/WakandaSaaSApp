@@ -1,0 +1,303 @@
+==============================================================
+POC: AI Creative Studio — Proof of Concept
+Goal: Prove that the core loop works BEFORE building anything else
+Definition of success: A user opens the desktop app, types a prompt,
+and receives a generated image/video — powered by a shared Flow account
+via your backend proxy.
+==============================================================
+
+You are a senior full-stack developer. Build a minimal POC with 3 parts:
+  1. A simple Node.js/Express backend API (proxy to Flow)
+  2. A minimal Electron desktop app (prompt → result)
+  3. A single HTML page (register + get API key)
+
+DO NOT build: payments, admin panel, credit system, email, Android app,
+auto-updater, or any non-essential feature.
+
+==============================================================
+POC PART 1 — BACKEND API (Node.js + Express)
+==============================================================
+
+Stack: Node.js 20 + Express + Redis (BullMQ queue) + axios + playwright
+
+Folder structure:
+/poc-backend
+  server.js          -- Express app entry
+  routes/
+    auth.js          -- POST /api/validate-key
+    generate.js      -- POST /api/generate/image, POST /api/generate/video
+    jobs.js          -- GET /api/jobs/:id
+  services/
+    flowProxy.js     -- The core: maintains Flow session + makes requests
+    queue.js         -- BullMQ queue setup
+    sessionKeeper.js -- Cron: keeps Flow session alive every 10 min
+  middleware/
+    keyAuth.js       -- Validates X-License-Key header
+  db.js              -- SQLite (use 'better-sqlite3', no MySQL needed for POC)
+  .env.example
+  package.json
+
+--- DATABASE (SQLite for POC — no MySQL setup needed) ---
+
+Table: poc_users
+  id, email, license_key (random 32-char hex), is_active, created_at
+
+Table: poc_jobs
+  id (uuid), user_id, type (image/video), prompt,
+  status (queued/processing/completed/failed),
+  output_url, error, created_at, updated_at
+
+Seed 1 test user with a known license key for POC testing.
+Example: key = "poc-test-key-12345678"
+
+--- FLOW PROXY SERVICE (flowProxy.js) — MOST CRITICAL FILE ---
+
+IMPORTANT: This service has TWO possible implementations.
+Implement BOTH and switch between them via env var FLOW_MODE.
+
+FLOW_MODE=api (if Flow has a REST API):
+  - Store FLOW_API_KEY in .env
+  - Make direct HTTP requests to Flow's API endpoints
+  - No browser automation needed
+  - Headers: { Authorization: "Bearer {FLOW_API_KEY}" }
+
+FLOW_MODE=browser (if Flow requires browser session):
+  - Use Playwright (npm install playwright)
+  - On startup: launch headless Chromium, navigate to flow.so, log in
+    using FLOW_EMAIL + FLOW_PASSWORD from .env
+  - Store cookies/session after login
+  - On each generation request: use the stored session to make the
+    generation request programmatically
+  - Keep session alive: ping flow.so/api/ping (or equivalent) every 10 min
+
+INVESTIGATION STEP (do this BEFORE implementing either mode):
+  Add a script: scripts/investigateFlow.js
+  This script opens Playwright with headful (visible) browser,
+  logs into Flow with the provided credentials, then:
+  - Logs ALL network requests to console (request URL + method + body)
+  - Waits 60 seconds (developer manually generates something in Flow)
+  - Logs the response of the generation request
+  Output: the exact API endpoint, headers, and payload Flow uses internally.
+  Run with: node scripts/investigateFlow.js
+  Developer MUST run this first and update flowProxy.js accordingly.
+
+Queue system (REQUIRED — prevents concurrent Flow session conflicts):
+  Use BullMQ with Redis.
+  All generation requests go into a single queue: "generation-queue"
+  Concurrency: 1 (one job at a time — shared Flow account cannot handle parallel)
+  On job complete: update poc_jobs table, store output_url
+
+--- API ENDPOINTS ---
+
+POST /api/validate-key
+  Body: { "license_key": "abc..." }
+  Logic: Look up key in poc_users where is_active=1
+  Response 200: {
+    valid: true,
+    user: { email: "user@test.com" },
+    subscription: {
+      status: "active",
+      expires_at: "2026-05-01",
+      days_remaining: 37,
+      badge: "MONTHLY ACCESS"
+    }
+  }
+  Response 401: { valid: false, error: "INVALID_KEY" }
+
+POST /api/generate/image
+  Header: X-License-Key: {key}
+  Body: { prompt: string, model: "default", aspect_ratio: "16:9" }
+  Middleware: keyAuth.js validates key first
+  Logic:
+    1. Create job in poc_jobs with status=queued
+    2. Add to BullMQ queue
+    3. Return { job_id, status: "queued" }
+
+POST /api/generate/video
+  Header: X-License-Key: {key}
+  Body: { prompt: string, duration: 8, quality: "fast" }
+  Same pattern as image — different Flow endpoint
+
+GET /api/jobs/:id
+  Header: X-License-Key: {key}
+  Logic: fetch job from poc_jobs, return current status + output_url if done
+  Poll every 3s from frontend until status = completed or failed
+
+--- MIDDLEWARE: keyAuth.js ---
+  Extract X-License-Key from request headers
+  Query SQLite: SELECT * FROM poc_users WHERE license_key = ? AND is_active = 1
+  If found: attach user to req.user, call next()
+  If not found: return 401 { error: "UNAUTHORIZED" }
+
+--- SESSION KEEPER (sessionKeeper.js) ---
+  Run on app startup using node-cron
+  Every 10 minutes: call a lightweight Flow endpoint to keep session alive
+  If session expires (401 from Flow): re-login automatically using stored credentials
+  Log session status to console
+
+--- .env.example ---
+PORT=3001
+FLOW_MODE=browser         # or "api"
+FLOW_EMAIL=your@email.com
+FLOW_PASSWORD=yourpassword
+FLOW_API_KEY=             # if FLOW_MODE=api
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=any-random-string
+
+==============================================================
+POC PART 2 — ELECTRON DESKTOP APP
+==============================================================
+
+Stack: Electron 28 + React 18 + Vite + Tailwind CSS
+Distribution: portable target (single .exe, no installer, no code signing)
+electron-builder config: win.target = "portable"
+
+Folder structure:
+/poc-electron
+  src/
+    main/
+      main.js          -- Electron entry, creates BrowserWindow
+      preload.js       -- Context bridge: exposes ipcRenderer safely
+    renderer/
+      App.jsx          -- Root React component, routing
+      pages/
+        AuthPage.jsx   -- Key entry screen
+        DashboardPage.jsx  -- Choose: Image or Video
+        ImagePage.jsx  -- Image generation UI
+        VideoPage.jsx  -- Video generation UI
+      store/
+        appStore.js    -- Zustand: licenseKey, user, subscription
+      api.js           -- All backend calls (axios, base URL from env)
+  electron-builder.yml
+  vite.config.js
+  package.json
+
+--- WINDOW SETUP (main.js) ---
+const win = new BrowserWindow({
+  width: 1200, height: 800,
+  title: "YourBrand App",
+  webPreferences: {
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,
+    nodeIntegration: false
+  }
+})
+// In dev: load localhost:5173
+// In prod: load file://dist/index.html
+
+--- SCREENS TO BUILD ---
+
+AuthPage (first screen, no key stored):
+  - Centered dark card with your logo + app name
+  - Input: "Enter your API License Key" (text input, full width)
+  - Button: "Activate" → calls POST /api/validate-key
+  - On success: save key to electron-store, show DashboardPage
+  - On fail: show red error message "Invalid or expired key"
+  - Link: "Get access at [yoursite.com]" → opens browser
+
+DashboardPage:
+  - Header bar: "{email}" | "MONTHLY ACCESS" green badge | "Expires in Xd" | "Sign out" button
+  - Center: "Choose Your Tool" heading
+  - Two side-by-side cards:
+    Left card:  Image generation icon + "AI Image Generation" + description + "Open" button
+    Right card: Video generation icon + "AI Video Generation" + description + "Open" button
+  - Footer: "YourBrand • v0.1.0-poc"
+  - Sign out: clears stored key, returns to AuthPage
+
+ImagePage:
+  - Back button (← Dashboard) in top left
+  - Main canvas area (dark background):
+    - Empty state: "Start creating or drop media"
+    - After generation: shows image (img tag with output_url)
+    - Loading state: animated pulse skeleton
+  - Bottom bar (sticky):
+    [ + ] [ text input: "What do you want to create?" ] [ Model: Default x1 ] [ → ]
+  - On submit:
+    1. POST /api/generate/image → get job_id
+    2. Show skeleton in canvas
+    3. Poll GET /api/jobs/{job_id} every 3 seconds
+    4. On completed: render image with download button
+    5. On failed: show red error message
+
+VideoPage:
+  - Same layout as ImagePage
+  - Bottom bar: prompt + duration selector (4s / 8s) + quality (Fast/HD) + send
+  - After completion: HTML5 <video> tag with controls + download button
+  - Note: video takes longer — show "Generating video... this may take 1-2 minutes"
+    with animated progress indicator
+
+--- electron-builder.yml ---
+appId: com.poc.yourcreativestudio
+productName: YourBrand App POC
+directories:
+  output: dist-electron
+files:
+  - dist/**/*
+  - src/main/**/*
+win:
+  target:
+    - target: portable    # NO installer, NO code signing needed
+      arch: [x64]
+  icon: assets/icon.ico
+  # No certificateFile — deliberately unsigned for POC
+
+--- api.js (all backend calls) ---
+const BASE = process.env.API_URL || 'http://localhost:3001'
+
+export const validateKey = (key) =>
+  axios.post(`${BASE}/api/validate-key`, { license_key: key })
+
+export const generateImage = (key, body) =>
+  axios.post(`${BASE}/api/generate/image`, body, {
+    headers: { 'X-License-Key': key }
+  })
+
+export const generateVideo = (key, body) =>
+  axios.post(`${BASE}/api/generate/video`, body, {
+    headers: { 'X-License-Key': key }
+  })
+
+export const pollJob = (key, jobId) =>
+  axios.get(`${BASE}/api/jobs/${jobId}`, {
+    headers: { 'X-License-Key': key }
+  })
+
+==============================================================
+POC PART 3 — MINIMAL WEBSITE (single HTML file)
+==============================================================
+
+Single file: /poc-website/index.html
+No framework. Pure HTML + Tailwind CDN.
+
+Pages (show/hide with JS, no routing):
+  1. Landing: headline + "Get POC Access" button → shows register form
+  2. Register form: name + email + submit → POST /api/register → shows key
+  3. Key display: "Your API License Key: [key]" + copy button + download app link
+
+Backend addition for website: add to server.js
+  POST /api/register
+    Body: { name, email }
+    Logic: generate random 32-char hex key, insert into poc_users
+    Response: { license_key: "abc123..." }
+
+==============================================================
+POC SUCCESS CRITERIA (test these in order)
+==============================================================
+1. Run: node server.js → backend starts on port 3001, no errors
+2. Open poc-website/index.html in browser → register → get a key
+3. Run Electron app → enter the key → see DashboardPage
+4. Click "Open" on Image card → type a prompt → hit send
+5. See skeleton loading → then see an actual generated image
+6. Click "Open" on Video card → type a prompt → hit send
+7. See "Generating..." → then see a playable video
+8. All 7 steps pass = POC is proven = proceed to full build
+
+==============================================================
+DELIVERABLES
+==============================================================
+1. /poc-backend    — Node.js Express server (runnable with: npm install && npm start)
+2. /poc-electron   — Electron app (runnable with: npm install && npm run dev)
+                     Buildable with: npm run build → produces portable .exe in dist-electron/
+3. /poc-website    — Single index.html file
+4. README.md       — Step by step: how to set up, configure .env, run POC
+5. scripts/investigateFlow.js — Network investigation script
