@@ -1,0 +1,19 @@
+Top risks ranked by severity
+
+1.AI provider ToS — account termination kills your entire business overnight - Critical
+If you use shared Flow.so/Google accounts (like Wakanda does), all 100 accounts can be banned instantly. No warning. Use Vertex AI API instead — you are legally a developer building on top.
+
+2.Electron app signing — Windows will block unsigned .exe with "unknown publisher" warning -High
+Code signing certificate costs $200–500/yr (Sectigo/DigiCert). Without it, 80% of users will be scared off by Windows Defender SmartScreen. Budget for this upfront.
+
+3.Payment chargeback risk — users demand refund when AI generates poor output - high
+Indian users on Razorpay have strong chargeback rights. If chargeback rate exceeds 1%, Razorpay freezes payouts. Write clear no-refund policy and limit free trial credits.
+
+4.API cost blowout — one viral moment can consume ₹50,000 in API credits overnight - High
+Set hard per-user daily limits in your backend. Set a Google Cloud billing alert at ₹5,000/day. Never let the API run unbounded.
+
+5.Auto-update complexity — Electron apps need a live update server (electron-updater) - Med
+Without auto-update, every bug fix requires users to manually download a new .exe. Build electron-updater from day one — it is not optional for a live product.
+
+6.Key leakage — users share API license keys on Telegram/WhatsApp groups - Med
+Bind key to user's device fingerprint or IP range. Add anomaly detection: same key used from 5+ different IPs = auto-revoke. This is a real problem at scale.
