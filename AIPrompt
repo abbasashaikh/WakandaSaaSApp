@@ -1,0 +1,640 @@
+==============================================================
+PROJECT: AI Creative Studio — Full SaaS Platform
+Architecture: Website + Backend API + Electron Desktop App + Android APK
+Inspired by: Wakanda Creatives (wakandacreatives.store) — reverse engineered
+==============================================================
+
+You are a senior full-stack developer. Build a complete, production-ready
+AI creative studio platform with three interconnected components:
+  1. A website (auth + billing + dashboard + admin)
+  2. A backend API server (key validation + AI proxy + credit system)
+  3. A desktop app (Electron — Windows EXE + auto-updater)
+  4. An Android app (Capacitor WebView wrapper — APK sideload)
+
+All three components communicate via a single API LICENSE KEY system.
+The website issues keys, the app uses keys, the backend validates keys.
+
+==============================================================
+COMPONENT 1 — WEBSITE (Laravel 11 + MySQL + Tailwind)
+==============================================================
+
+--- TECH STACK ---
+Backend:  Laravel 11 (PHP 8.2)
+Frontend: Blade templates + Tailwind CSS + Alpine.js
+Database: MySQL 8
+Cache/Queue: Redis
+Email: Resend.com (transactional)
+Payments: Razorpay
+Auth: Laravel Breeze + Laravel Socialite (Google OAuth)
+Storage: Cloudflare R2 or AWS S3 (for generated media)
+Deployment: Nginx + PHP-FPM on Ubuntu VPS
+
+--- DATABASE SCHEMA (create all migrations) ---
+
+Table: users
+  id (bigint, PK)
+  name (varchar 255)
+  email (varchar 255, unique)
+  password (varchar 255, nullable — null for OAuth users)
+  google_id (varchar 255, nullable, unique)
+  avatar_url (text, nullable)
+  role (enum: 'user', 'admin', default 'user')
+  is_active (boolean, default true)
+  created_at, updated_at
+
+Table: plans
+  id (bigint, PK)
+  name (varchar 100)         -- e.g. "Monthly Access Plan"
+  slug (varchar 100, unique) -- e.g. "monthly"
+  price_inr (int)            -- price in paise (e.g. 89900 = ₹899)
+  credits_image (int)        -- image generation credits per cycle
+  credits_video (int)        -- video generation credits per cycle
+  validity_days (int)        -- e.g. 30
+  features (json)            -- array of feature strings for pricing page
+  is_active (boolean)
+  sort_order (int)
+  created_at, updated_at
+
+Table: subscriptions
+  id (bigint, PK)
+  user_id (FK → users)
+  plan_id (FK → plans)
+  status (enum: 'pending','active','expired','cancelled')
+  started_at (timestamp)
+  expires_at (timestamp)
+  razorpay_order_id (varchar, nullable)
+  razorpay_payment_id (varchar, nullable)
+  razorpay_subscription_id (varchar, nullable)
+  amount_paid_inr (int)
+  created_at, updated_at
+
+Table: api_license_keys
+  id (bigint, PK)
+  user_id (FK → users, unique) -- one active key per user
+  subscription_id (FK → subscriptions)
+  key_value (varchar 64, unique) -- UUID-v4 or crypto random hex
+  status (enum: 'active','expired','revoked')
+  expires_at (timestamp)
+  last_used_at (timestamp, nullable)
+  last_used_ip (varchar 45, nullable)
+  device_fingerprint (varchar 255, nullable)
+  created_at, updated_at
+
+Table: credit_ledger
+  id (bigint, PK)
+  user_id (FK → users)
+  subscription_id (FK → subscriptions)
+  type (enum: 'image','video')
+  event (enum: 'grant','debit','bonus','refund')
+  amount (int)  -- positive for grant, negative for debit
+  balance_after (int)
+  reference_id (varchar, nullable) -- generation job id
+  note (text, nullable)
+  created_at
+
+Table: generation_jobs
+  id (bigint, PK)
+  user_id (FK → users)
+  api_key_id (FK → api_license_keys)
+  type (enum: 'image','video')
+  prompt (text)
+  model (varchar 100)         -- e.g. "nano-banana-2"
+  parameters (json)           -- duration, quality, aspect ratio, etc.
+  status (enum: 'queued','processing','completed','failed')
+  output_url (text, nullable) -- R2/S3 URL
+  provider_job_id (varchar, nullable) -- AI provider's job ID
+  provider (varchar 50)       -- 'vertex_ai', 'fal_ai', etc.
+  credits_used (int)
+  error_message (text, nullable)
+  created_at, updated_at
+
+Table: ai_provider_accounts
+  id (bigint, PK)
+  provider (varchar 50)  -- 'vertex_ai', 'fal_ai'
+  label (varchar 100)
+  credentials (text, encrypted) -- JSON, AES-256 encrypted
+  is_active (boolean)
+  requests_today (int, default 0)
+  daily_limit (int)
+  last_reset_at (timestamp)
+  created_at, updated_at
+
+Table: invoices
+  id (bigint, PK)
+  user_id (FK → users)
+  subscription_id (FK → subscriptions)
+  invoice_number (varchar, unique) -- INV-2026-001
+  amount_inr (int)
+  gst_amount (int)
+  status (enum: 'paid','pending','refunded')
+  pdf_url (text, nullable)
+  issued_at (timestamp)
+  created_at
+
+--- ROUTES & PAGES ---
+
+Public routes:
+  GET  /                    Landing page (hero, features, pricing, testimonials, CTA)
+  GET  /features            Features detail page
+  GET  /pricing             Pricing cards (pulled from plans table, active only)
+  GET  /login               Login form
+  POST /login               Process login
+  GET  /register            Register form
+  POST /register            Process registration
+  GET  /auth/google         Redirect to Google OAuth
+  GET  /auth/google/callback Process Google OAuth callback
+  GET  /forgot-password     Forgot password form
+  POST /forgot-password     Send reset email
+  GET  /reset-password/{token} Reset password form
+  POST /reset-password      Process password reset
+  GET  /privacy-policy      Privacy policy page
+  GET  /terms               Terms and conditions page
+  GET  /refund-policy       Refund policy page
+
+Authenticated routes (middleware: auth):
+  GET  /dashboard           Main dashboard (subscription status, key, download links)
+  GET  /profile             Edit profile (name, avatar, change password)
+  PUT  /profile             Update profile
+  GET  /billing             Subscription details, invoice history
+  GET  /plans               View available plans
+  POST /checkout/{plan}     Create Razorpay order → return order_id + key
+  GET  /checkout/success    Payment success page
+  GET  /generations         History of all generations (paginated)
+
+Webhook routes (no auth, verify signature):
+  POST /webhooks/razorpay   Handle payment events
+
+Admin routes (middleware: auth + admin role):
+  GET  /admin               Admin dashboard with stats
+  GET  /admin/users         User list with search/filter
+  GET  /admin/users/{id}    User detail — subscription, keys, generation history
+  POST /admin/users/{id}/grant-credits  Manually add credits
+  POST /admin/users/{id}/revoke-key     Revoke API key
+  POST /admin/users/{id}/extend         Extend subscription N days
+  GET  /admin/subscriptions Subscription list with filters
+  GET  /admin/generations   All generation jobs, filterable
+  CRUD /admin/plans         Create/edit/delete plans
+  CRUD /admin/providers     Manage AI provider accounts (credentials encrypted)
+  GET  /admin/revenue       Revenue chart, cost vs revenue, monthly breakdown
+
+--- KEY BUSINESS LOGIC ---
+
+1. API LICENSE KEY GENERATION
+   - Triggered by: Razorpay webhook payment.captured event
+   - Process:
+     a. Verify Razorpay HMAC-SHA256 webhook signature
+     b. Find pending subscription by razorpay_order_id
+     c. Set subscription status = 'active', started_at = now(), expires_at = now() + plan.validity_days
+     d. Generate unique key: bin2hex(random_bytes(32)) → 64 char hex
+     e. Insert into api_license_keys with status='active', expires_at = subscription.expires_at
+     f. Grant credits: insert into credit_ledger (image credits + video credits)
+     g. Send "Payment Confirmed" email with subscription details
+     h. If user already has an old key for this plan, mark it revoked first
+
+2. KEY EXPIRY CRON JOB (run daily at midnight)
+   - Find all api_license_keys where expires_at < now() AND status = 'active'
+   - Set status = 'expired'
+   - Find linked subscription, set status = 'expired'
+   - Send "Subscription Expired" email
+   - Send "Renew now" email 7 days before expiry (separate job)
+
+3. DASHBOARD DATA
+   Show on /dashboard:
+   - Subscription card: plan name, status badge (Active/Expired), expiry date,
+     days remaining as countdown, renewal button
+   - API License Key: show masked (first 8 + last 8 chars, rest asterisks)
+     with "Copy" and "Regenerate" buttons. Regenerate invalidates old key.
+   - Account profile: username (derived from email), email, role
+   - Download section: "Download for Windows" (links to latest EXE from R2/S3)
+                       "Download for Android" (links to latest APK from R2/S3)
+   - Quick actions: Adjust security settings, Contact support, Review invoices
+
+4. CREDIT SYSTEM
+   - Each plan has credits_image and credits_video per month
+   - Every generation deducts from credit_ledger
+   - balance = SUM(amount) from credit_ledger WHERE user_id = X AND subscription_id = Y
+   - If balance <= 0 → return 402 with JSON: { error: "CREDITS_EXHAUSTED", buy_url: "/plans" }
+   - Admin can grant bonus credits manually
+   - Show credit balance on dashboard with progress bar (used/total)
+
+--- EMAIL TEMPLATES (use Resend + Laravel Mail) ---
+1. Welcome email (on register)
+2. Payment confirmed (on webhook success) — include plan name, expiry, key instructions
+3. Subscription expiring soon (7 days before) — include renew link
+4. Subscription expired — include renew link
+5. Password reset email
+6. New login from unknown IP (security alert, optional)
+
+==============================================================
+COMPONENT 2 — BACKEND API SERVER
+(Same Laravel app, separate /api prefix, stateless JWT or key-based auth)
+==============================================================
+
+--- ALL API ENDPOINTS ---
+
+Key validation (called by app on every launch):
+  POST /api/v1/auth/validate
+  Body: { "license_key": "abc123..." }
+  Response (200 OK):
+  {
+    "valid": true,
+    "user": {
+      "username": "anaspathan6046",
+      "email": "user@example.com",
+      "avatar": null
+    },
+    "subscription": {
+      "plan_name": "Monthly Access Plan",
+      "status": "active",
+      "expires_at": "2026-04-01T00:00:00Z",
+      "days_remaining": 9,
+      "badge": "MONTHLY ACCESS"
+    },
+    "credits": {
+      "image": { "used": 12, "total": 200, "remaining": 188 },
+      "video": { "used": 3, "total": 50, "remaining": 47 }
+    }
+  }
+  Response (401): { "valid": false, "error": "KEY_INVALID" }
+  Response (403): { "valid": false, "error": "SUBSCRIPTION_EXPIRED", "renew_url": "https://yoursite.com/plans" }
+
+Image generation:
+  POST /api/v1/generate/image
+  Headers: X-License-Key: {key}
+  Body:
+  {
+    "prompt": "a futuristic city at sunset",
+    "model": "nano-banana-2",       -- your internal model codename
+    "aspect_ratio": "16:9",         -- "1:1", "9:16", "16:9", "4:3"
+    "quality": "standard",          -- "standard" | "hd"
+    "count": 1                      -- 1–4 images
+  }
+  Response (200):
+  {
+    "job_id": "gen_abc123",
+    "status": "queued"
+  }
+
+Video generation:
+  POST /api/v1/generate/video
+  Headers: X-License-Key: {key}
+  Body:
+  {
+    "prompt": "ocean waves crashing on rocks",
+    "model": "nano-banana-2",
+    "duration": 8,                  -- seconds: 4 or 8
+    "quality": "fast",              -- "fast" | "standard"
+    "aspect_ratio": "16:9"
+  }
+  Response (200):
+  {
+    "job_id": "gen_xyz789",
+    "status": "queued"
+  }
+
+Job status polling:
+  GET /api/v1/jobs/{job_id}
+  Headers: X-License-Key: {key}
+  Response:
+  {
+    "job_id": "gen_abc123",
+    "status": "completed",          -- "queued"|"processing"|"completed"|"failed"
+    "type": "image",
+    "output_url": "https://cdn.yoursite.com/gen_abc123.jpg",
+    "created_at": "...",
+    "completed_at": "..."
+  }
+
+Generation history:
+  GET /api/v1/history?type=image&page=1&per_page=20
+  Headers: X-License-Key: {key}
+  Response: paginated list of generation_jobs
+
+Media upload (for image-to-video or img2img):
+  POST /api/v1/upload
+  Headers: X-License-Key: {key}
+  Body: multipart/form-data, field "file"
+  Response: { "upload_url": "https://cdn.yoursite.com/uploads/abc.jpg" }
+
+--- API MIDDLEWARE STACK (applied to all /api/v1/* except /auth/validate) ---
+1. KeyValidationMiddleware:
+   a. Extract key from header X-License-Key
+   b. Look up api_license_keys where key_value = ? AND status = 'active'
+   c. Check expires_at > now() → else return 403 SUBSCRIPTION_EXPIRED
+   d. Check linked user is_active = true → else return 403
+   e. Update last_used_at, last_used_ip on the key record
+   f. Attach $user and $subscription to the request
+
+2. CreditCheckMiddleware:
+   a. Determine generation type (image/video) from route
+   b. Calculate current balance from credit_ledger
+   c. If balance <= 0 → return 402 CREDITS_EXHAUSTED
+   d. Continue — actual deduction happens in the job after success
+
+3. RateLimitMiddleware:
+   a. Per key: max 10 generation requests per minute
+   b. Return 429 with Retry-After header
+
+--- AI PROXY LOGIC (Laravel Job + Queue) ---
+
+When generation request arrives:
+1. Create generation_jobs record with status='queued'
+2. Dispatch GenerateMediaJob to Redis queue
+3. Return job_id immediately (non-blocking)
+
+GenerateMediaJob:
+1. Fetch active ai_provider_accounts (round-robin or by type)
+2. Decrypt provider credentials
+3. For IMAGE (use fal.ai):
+   - POST https://fal.run/fal-ai/flux/dev (or your chosen model)
+   - Headers: Authorization: Key {fal_api_key}
+   - Body: { prompt, image_size, num_images }
+   - Poll for result URL
+4. For VIDEO (use Vertex AI Veo / Google):
+   - Use Google Cloud Vertex AI SDK
+   - Submit generateVideo request
+   - Poll Operation until done
+5. Download result → upload to your R2/S3
+6. Update generation_jobs: status='completed', output_url=cdn_url
+7. Debit credit_ledger: insert negative amount record
+8. On failure: status='failed', error_message, REFUND credits
+
+--- SECURITY ---
+- All API keys stored encrypted in DB (AES-256, key in .env)
+- Rate limiting on all endpoints
+- IP whitelist option for admin panel
+- Webhook signature verification (HMAC-SHA256) for Razorpay
+- CORS: whitelist only your app's domain and Electron app origin
+- Helmet-equivalent headers (Content-Security-Policy, etc.)
+- Input validation + sanitization on all inputs
+- SQL injection: always use parameterized queries (Eloquent ORM)
+
+==============================================================
+COMPONENT 3 — ELECTRON DESKTOP APP (Windows EXE)
+==============================================================
+
+--- TECH STACK ---
+Framework: Electron 28
+Frontend: React 18 + TypeScript
+Styling: Tailwind CSS
+Build tool: Vite
+Packaging: electron-builder
+Auto-update: electron-updater (from your own update server or GitHub Releases)
+HTTP client: axios
+State: Zustand
+Storage: electron-store (for persisting license key locally)
+
+--- FOLDER STRUCTURE ---
+/electron-app
+  /src
+    /main           -- Electron main process
+      main.ts       -- App entry, window creation, IPC handlers
+      updater.ts    -- electron-updater setup
+      preload.ts    -- Context bridge (exposes safe IPC to renderer)
+    /renderer       -- React app (runs in Chromium)
+      /pages
+        AuthPage.tsx        -- License key entry screen (first launch)
+        DashboardPage.tsx   -- Choose your tool: Image or Video
+        ImageGenPage.tsx    -- Image generation interface
+        VideoGenPage.tsx    -- Video generation interface
+        HistoryPage.tsx     -- Past generations gallery
+      /components
+        Header.tsx          -- Top bar: user email, plan badge, expiry, sign out
+        ModelSelector.tsx   -- Dropdown for model + generation count (like "Nano Banana 2 x2")
+        PromptBar.tsx       -- Bottom input: text area + attach + model selector + send button
+        Canvas.tsx          -- Shows generated images/videos, drag-drop area
+        HistoryGrid.tsx     -- Grid of past generations with download button
+      /store
+        authStore.ts        -- Zustand: licenseKey, user, subscription, credits
+        generationStore.ts  -- Zustand: jobs, polling state
+      /api
+        client.ts           -- axios instance with X-License-Key header auto-injected
+        auth.ts             -- validateKey()
+        generate.ts         -- generateImage(), generateVideo(), pollJob()
+        history.ts          -- getHistory()
+  /build          -- electron-builder output (EXE, installer)
+  electron-builder.yml
+
+--- APP FLOW ---
+
+First Launch (no stored key):
+  → Show AuthPage: centered card with logo + "Enter your API License Key"
+  → Input field (paste key) + "Activate" button
+  → Call POST /api/v1/auth/validate
+  → On success: store key in electron-store, navigate to DashboardPage
+  → Show user info: email, plan badge, expiry
+  → On failure: show error "Invalid or expired key. Get one at [yoursite.com]"
+
+Subsequent Launches:
+  → Read key from electron-store
+  → Auto-call /api/v1/auth/validate in background
+  → If valid: go straight to DashboardPage
+  → If expired: show "Subscription expired" screen + "Renew" button (opens browser)
+  → If invalid: clear stored key, go to AuthPage
+
+Dashboard Page:
+  → Header: "{username}" + "MONTHLY ACCESS" badge (green) + "Expires in Xd" + "Sign out"
+  → Center: "Choose Your Tool" heading + subtitle
+  → Two cards side by side:
+    Left:  "Wakanda Image" (or your brand) — AI Image Generation — "Open" button
+    Right: "Wakanda Video" — AI Video Generation — "Open" button
+  → Footer: "YourBrand • v1.0.0 • Powered by YourBrand AI"
+
+Image Generation Page:
+  → Back button → Dashboard
+  → Top: breadcrumb "Image Generation"
+  → Center canvas: empty state "Start creating or drop media"
+                   Shows generated images as they complete
+                   Multiple images shown in grid
+  → Bottom bar (sticky):
+    [ + attach media ] [ Prompt text input "What do you want to create?" ] [ Model selector ] [ → send ]
+  → Model selector pill: shows current model + count (e.g. "YourModel x2")
+    Click → dropdown: select model variant, select count (x1, x2, x4)
+  → On submit:
+    a. POST /api/v1/generate/image → get job_id
+    b. Show skeleton loader in canvas
+    c. Poll GET /api/v1/jobs/{job_id} every 3 seconds
+    d. On complete: replace skeleton with actual image
+    e. Show download button on hover
+  → Drag & drop media → for img2img: upload via POST /api/v1/upload → use url in prompt
+
+Video Generation Page:
+  → Identical layout to Image Generation Page
+  → Model selector shows video models
+  → Bottom bar: same prompt bar + duration selector (4s / 8s) + quality (Fast / HD)
+  → On submit:
+    a. POST /api/v1/generate/video → get job_id
+    b. Show "Generating..." progress indicator (video takes longer: 30–120s)
+    c. Poll every 5 seconds
+    d. On complete: show video player (HTML5 <video>) with play/pause + download
+
+History Page:
+  → Searchable/filterable grid of all past generations
+  → Filter: All / Images / Videos
+  → Each card: thumbnail, prompt (truncated), date, download button
+  → Clicking card: opens full-size preview modal
+
+Sign Out:
+  → Clear electron-store key
+  → Navigate to AuthPage
+
+--- WINDOW CONFIGURATION ---
+  mainWindow = new BrowserWindow({
+    width: 1200, height: 800,
+    minWidth: 900, minHeight: 600,
+    titleBarStyle: 'default',   -- shows standard Windows title bar (like Wakanda)
+    title: 'YourBrand App — Dashboard',
+    icon: path.join(__dirname, 'assets/icon.ico'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false   -- IMPORTANT: security
+    }
+  })
+
+--- AUTO-UPDATER (electron-updater) ---
+  - Check for update on app launch (after auth)
+  - Update server: GitHub Releases OR your own server
+  - Show toast notification: "Update available — v1.0.1"
+  - User clicks "Update & Restart" → downloads + installs silently
+  - Configure in electron-builder.yml:
+    publish:
+      provider: generic
+      url: https://yoursite.com/updates/
+
+--- electron-builder.yml ---
+appId: com.yourbrand.app
+productName: YourBrand App
+directories:
+  output: build
+win:
+  target: nsis        -- produces .exe installer
+  icon: assets/icon.ico
+  certificateFile: cert.p12          -- code signing certificate
+  certificatePassword: ${CERT_PASS}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+publish:
+  provider: generic
+  url: https://yoursite.com/updates/
+
+==============================================================
+COMPONENT 4 — ANDROID APK (Capacitor WebView wrapper)
+==============================================================
+
+--- APPROACH ---
+Use Capacitor.js to wrap the Electron app's React frontend as a WebView app.
+The Android app loads the same React UI, but calls your backend API directly.
+The license key is stored in Capacitor's Preferences (secure storage).
+
+--- SETUP ---
+1. Take the /renderer React app from the Electron project
+2. Run: npx cap init + npx cap add android
+3. Build React app → copy to /public → sync with Capacitor
+4. Override API base URL for mobile: use VITE_API_URL env var
+5. Build APK: ./gradlew assembleRelease
+6. Host the APK on your website dashboard for download
+
+--- ANDROID SPECIFIC ADJUSTMENTS ---
+- Add internet permission to AndroidManifest.xml
+- Set allowMixedContent false, usesCleartextTraffic false
+- Handle back button to go back in WebView history
+- Set WebView settings: setJavaScriptEnabled(true), setDomStorageEnabled(true)
+- Disable zoom controls for app-like feel
+- Set app icon and splash screen
+
+==============================================================
+COMPONENT 5 — DEPLOYMENT & INFRASTRUCTURE
+==============================================================
+
+VPS Setup (Ubuntu 22.04):
+  - Nginx as reverse proxy
+  - PHP 8.2 + PHP-FPM for Laravel
+  - MySQL 8
+  - Redis (for queues + cache)
+  - Laravel Horizon (queue worker dashboard)
+  - Supervisor (keeps queue workers running)
+  - SSL via Let's Encrypt (certbot)
+  - UFW firewall: only ports 22, 80, 443 open
+
+File structure on server:
+  /var/www/yourbrand/      -- Laravel app
+  /etc/nginx/sites-available/yourbrand.conf
+  Supervisor config for queue:workers
+
+Cron jobs (in Laravel scheduler):
+  - Daily: CheckSubscriptionExpiry
+  - Daily 09:00: SendExpiryReminderEmails (7 days before)
+  - Daily midnight: ResetProviderDailyCounters
+  - Hourly: AnomalyDetection (flag keys used from too many IPs)
+
+Cloudflare R2 / S3 buckets:
+  - yourbrand-generated-media/ — generated images + videos (public read)
+  - yourbrand-uploads/ — user uploaded media (private)
+  - yourbrand-app-builds/ — EXE, APK download files (public read)
+
+Environment variables needed (.env):
+  APP_KEY, APP_URL, DB_*, REDIS_*,
+  RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET,
+  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI,
+  RESEND_API_KEY,
+  FAL_API_KEY,
+  GOOGLE_CLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS,
+  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_BUCKET, AWS_URL,
+  LICENSE_KEY_ENCRYPTION_KEY  -- 32 byte key for AES-256
+  ELECTRON_UPDATE_URL
+
+==============================================================
+DELIVERABLES — WHAT TO BUILD AND HAND OVER
+==============================================================
+
+1. /website-backend     — Laravel 11 app (website + API combined)
+   - All migrations
+   - Seeders (1 admin user, 2 sample plans)
+   - All controllers, models, middleware
+   - Blade views for all pages
+   - All API routes
+   - Email templates (Markdown Mailables)
+   - Laravel Horizon config
+   - Supervisor config
+   - Nginx config
+   - .env.example
+
+2. /electron-app        — Electron + React desktop app
+   - Complete source code
+   - electron-builder.yml
+   - README: how to build + sign + publish update
+
+3. /android-app         — Capacitor wrapper
+   - Complete Android project
+   - README: how to build APK
+
+4. README.md (root)
+   - Setup instructions for all 3 components
+   - Environment variables explained
+   - How to deploy to VPS
+   - How to add a new AI provider
+   - How to build and release a new desktop app version
+
+5. /docs/api.md         — OpenAPI-style documentation for all API endpoints
+
+==============================================================
+IMPORTANT NOTES FOR DEVELOPER
+==============================================================
+- DO NOT implement account-sharing or credential-passing to users.
+  All AI calls go through YOUR server using YOUR provider API keys only.
+- Users only ever see their own API License Key (for app authentication).
+  They never see or interact with your AI provider keys.
+- The license key system is the security boundary:
+  key → validates subscription → app gets permission to generate
+  The AI provider is completely hidden from users.
+- Code signing for Windows EXE is REQUIRED before launch.
+  Windows Defender SmartScreen will block unsigned executables.
+  Purchase a code signing certificate from Sectigo or DigiCert.
+- Build electron-updater from day one, not as an afterthought.
+- Set hard per-user daily generation limits to prevent API cost blowout.
+  Suggested defaults: 20 images/day, 5 videos/day regardless of total credits.
+==============================================================
