@@ -1,0 +1,7 @@
+Q1.Why did Chrome show success but Electron showed failure?
+Ans- Chrome (Playwright) successfully generated the image. The backend received the response, extracted... nothing, threw "URL not found", marked the job as failed.
+The Electron app polls for job status, sees failed, shows "Generation failed". The Chrome window stayed open because the browser stayed visible — but the Electron side never got the URL.
+POC flow==>
+Electron → Backend API → BullMQ queue → Worker → flowProxy → 
+Playwright (opens Chrome) → Flow generates image → intercepts response → 
+extracts URL → saves to DB → Electron polls job → shows image
