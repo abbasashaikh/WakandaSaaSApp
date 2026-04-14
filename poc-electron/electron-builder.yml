@@ -1,0 +1,31 @@
+appId: com.poc.yourcreativestudio
+productName: YourBrand App POC
+copyright: Copyright © 2024
+
+directories:
+  output: dist-electron
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - src/main/**/*
+  - node_modules/**/*
+  - package.json
+
+# Electron entry
+extraMetadata:
+  main: src/main/main.js
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  # No code signing for POC
+  # certificateFile: ""
+
+# No macOS/Linux for POC
+# mac:
+#   target: dmg
+
+publish: null

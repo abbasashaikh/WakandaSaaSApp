@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-04-07T11:43:42.621Z",
+  "projectId": "3b4ccc20-e126-402d-a546-7385c77e7024",
+  "sessionCookie": {
+    "name": "__Secure-next-auth.session-token",
+    "value": "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..WmMmMfR18SXGaniG.4aFDbbFHyEQq6cicLMlNxJVFcTxdlgqgwclJb1WSQ0nLGFrVNeeVTzSa54mYWmib1UATgsgl4S1ZN9dIfOW-AZTGWEEiiCbUz-iwJkDnZ1Be86K1vMTIl-aF-b0R8MDB2hdCHDImVmML3YA88V_z5yfLgrCccFbNTun7FClfAjVjsP3mOMHSjeqZDZLfwF-isfEjC31dnwGj2H9larkAKaFGZNvrK8v4kIzBrRgwnqDHjJYO3_MHE4eA6UgGWDS935a4mvsOVjn8TcM3a4MdhbrKrFw2ZIvEO7yojZPzuaYOzk1XGAkZlv2aZ7e_xuD8ZnWC3MDoR_a9gRxu2Pon4WtMrc100xr07pa07ogi8pmMO1gCjwRx32xNfAOtNTHi0Z3je_x8usEftPGH9s7uBujBmlrgTUnkqWw6LlLDA4QGf4Po3xkpg19hZcJENdma2qXCBpwbKr5EIL5DJ5jjcogZUJahCBpB1A4ostZXXpB39G36wfr24De2_9IrkLUSniR7A6q0u_5aPFxs5jRyRzKzrivKDy1KqEaftYfWr2y2EoEivyb5Wp8v3kV9cPd4M6gFOcLZcHjVVixjjZ9ymWoPcejzITrfeyhFcXfLEGi7F23XDBUpJA2mMT9PkT_ksaTY-qjdB9mTuSsKEdhxY5oOfhykQ1R4JAA2PEtaYMqSy_GGHcxSmxm7X4aWjunrh9YgVjW2-vxTEsk06ATidrSj8ERgzG6B0dD_FnvcLGYco2TzGw-2uw250xqkrjo6IlNPvNhVEuXzaR8QYJjxpWDEFgZh_mgy6UQw_zUuEkr8vHKGZLtHebg4suoAAkqHrrvNI-YooPkpJXBeHuITs9T2g9w0CHFSwuMisYVNTCe7bauzQCaCHtTXyaZLf3bvNzdQyQBRVvLyPVL_48KSxi7vvIzkitEiXcI8nzrdxhZX-74DCE95UbnwZgprKPIj78aNPqxi-0sh8L--oGh_iwR-gg.pVkqfWx9FgpA34YYBBWrdQ"
+  },
+  "postCalls": [
+    {
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"Apr 07, 05:07 PM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"3b4ccc20-e126-402d-a546-7385c77e7024\",\"projectInfo\":{\"projectTitle\":\"Apr 07, 05:07 PM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    }
+  ],
+  "generationCalls": [],
+  "allCalls": [
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"d42005f1-6e98-4030-a18d-9838e1496747\",\"projectInfo\":{\"projectTitle\":\"Apr 07, 04:53 PM\",\"thumbnailMediaKey\":\"9607086a-6d20-42e5-ba66-f25e025301a9\"},\"creationTime\":\"2026-04-07T11:23:07.482267Z\"},{\"projectId\":\"ff4bcfcc-0326-4f4b-8bc1-90b183fd092b\",\"projectInfo\":{\"projectTitle\":\"Test - 2026-04-07T11:17:43.835Z\"},\"creationTime\":\"2026-04-07T11:17:43.936149Z\"},{\"projectId\":\"12a9f9e7-849f-4df2-a1c7-733b6a32683f\",\"projectInfo\":{\"projectTitle\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=9607086a-6d20-42e5-ba66-f25e025301a9&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 307,
+      "resBody": null
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=80df713d-b821-45f6-ad37-61684711122a&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 307,
+      "resBody": null
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=cb3522cb-79e1-49ab-899e-6399dd15ae07&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 307,
+      "resBody": null
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=324814b1-2b8a-4bc2-9e1e-c610509d33b1&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 307,
+      "resBody": null
+    },
+    {
+      "method": "POST",
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"Apr 07, 05:07 PM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"3b4ccc20-e126-402d-a546-7385c77e7024\",\"projectInfo\":{\"projectTitle\":\"Apr 07, 05:07 PM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "flow.projectInitialData",
+      "url": "https://labs.google/fx/api/trpc/flow.projectInitialData?input=%7B%22json%22%3A%7B%22projectId%22%3A%223b4ccc20-e126-402d-a546-7385c77e7024%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"projectName\":\"Apr 07, 05:07 PM\",\"projectId\":\"3b4ccc20-e126-402d-a546-7385c77e7024\",\"projectContents\":{\"externalReferenceMedia\":[{\"mediaId\":\"achernar\",\"mediaType\":\"AUDIO\",\"workflowDisplayName\":\"Achernar\",\"media\":{\"name\":\"achernar\",\"audio\":{\"generatedAudio\":{\"name\":\"Achernar\",\"description\":\"Female, soft, high pitch\",\"isPresetAudioSample\":true,\"audioSamplePath\":\"https://gstatic.com/aistudio/voices/samples/Achernar.wav\"}}}},{\"mediaId\":\"achird\",\"mediaType\":\"AUDIO\",\"workflo"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3A%22chEKD4IBDAjCscLOBhDw2fXqAQ%253D%253D%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"4bdc65a1-0db0-4257-86ae-42cb3e190b4d\",\"projectInfo\":{\"projectTitle\":\"Apr 03, 12:11 PM\",\"thumbnailMediaKey\":\"7ce860cf-db46-402d-9cb2-3710978aa45c\"},\"creationTime\":\"2026-04-03T06:41:12.550809Z\"},{\"projectId\":\"bb9d347f-1748-46f6-a506-12d6f03ada88\",\"projectInfo\":{\"projectTitle\":\"Apr 03, 12:08 PM\"},\"creationTime\":\"2026-04-03T06:38:17.146030Z\"},{\"projectId\":\"f3a747d0-7b9e-40ef-88dc-e5f14151b1fc\",\"projectInfo\":{\"projectTitle\":\"Apr 02, 12:21"
+    }
+  ]
+}

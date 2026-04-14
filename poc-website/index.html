@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YourBrand — AI Creative Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              400: '#818ef8',
+              500: '#6366f1',
+              600: '#4f46e5',
+            },
+            dark: {
+              900: '#0a0a0f',
+              800: '#111118',
+              700: '#1a1a26',
+              600: '#22223a',
+              500: '#2d2d4a',
+              400: '#3d3d5c',
+              300: '#6b6b8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50%       { opacity: 0.6; transform: scale(1.05); }
+    }
+    .pulse-ring { animation: pulse-ring 3s ease-in-out infinite; }
+
+    body { background-color: #0a0a0f; }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #818ef8 0%, #a78bfa 50%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Copy success */
+    .copy-btn.copied { background-color: #16a34a !important; }
+  </style>
+</head>
+<body class="min-h-screen text-white">
+
+  <!-- ═══════════════════════════════════════════════════════
+       PAGE: Landing
+  ═══════════════════════════════════════════════════════ -->
+  <div id="page-landing" class="fade-in">
+
+    <!-- Nav -->
+    <nav class="border-b border-white/5 px-6 py-4">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+            </svg>
+          </div>
+          <span class="font-bold text-white">YourBrand</span>
+        </div>
+        <button onclick="showPage('register')"
+          class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold
+                 px-4 py-2 rounded-xl transition-colors duration-200">
+          Get Access
+        </button>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <main class="max-w-5xl mx-auto px-6 py-20 text-center">
+
+      <!-- Glow -->
+      <div class="relative inline-block mb-8">
+        <div class="absolute inset-0 bg-brand-500/20 blur-3xl rounded-full pulse-ring pointer-events-none"></div>
+        <div class="relative w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-brand-500 to-purple-600
+                    flex items-center justify-center shadow-2xl shadow-brand-500/30">
+          <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+          </svg>
+        </div>
+      </div>
+
+      <h1 class="text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
+        Create Anything with<br/>
+        <span class="gradient-text">AI in Seconds</span>
+      </h1>
+
+      <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+        Generate stunning images and videos from text prompts.
+        Powered by the latest AI models, delivered through our
+        desktop app.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <button onclick="showPage('register')"
+          class="w-full sm:w-auto bg-gradient-to-r from-brand-500 to-brand-600
+                 hover:from-brand-400 hover:to-brand-500 text-white font-bold
+                 px-8 py-4 rounded-2xl text-lg shadow-xl shadow-brand-500/25
+                 transition-all duration-200 hover:-translate-y-0.5">
+          Get POC Access — Free
+        </button>
+        <div class="text-gray-500 text-sm">No credit card required</div>
+      </div>
+
+      <!-- Feature pills -->
+      <div class="mt-16 flex flex-wrap items-center justify-center gap-3">
+        <span class="bg-dark-700 border border-dark-500 text-gray-300 text-sm px-4 py-2 rounded-full">✦ AI Image Generation</span>
+        <span class="bg-dark-700 border border-dark-500 text-gray-300 text-sm px-4 py-2 rounded-full">✦ AI Video Generation</span>
+        <span class="bg-dark-700 border border-dark-500 text-gray-300 text-sm px-4 py-2 rounded-full">✦ Desktop App</span>
+        <span class="bg-dark-700 border border-dark-500 text-gray-300 text-sm px-4 py-2 rounded-full">✦ Instant API Key</span>
+        <span class="bg-dark-700 border border-dark-500 text-gray-300 text-sm px-4 py-2 rounded-full">✦ No Setup Required</span>
+      </div>
+
+    </main>
+
+    <!-- Feature cards -->
+    <section class="max-w-5xl mx-auto px-6 pb-20">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <div class="bg-dark-800 border border-dark-500 rounded-2xl p-6">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/15 border border-brand-500/20
+                      flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3 3h18a.75.75 0 01.75.75v16.5a.75.75 0 01-.75.75H3a.75.75 0 01-.75-.75V3.75A.75.75 0 013 3z"/>
+            </svg>
+          </div>
+          <h3 class="text-white font-bold text-lg mb-2">Image Generation</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Generate photorealistic images, illustrations, and concept art from text.
+            Multiple aspect ratios. Download in full resolution.
+          </p>
+        </div>
+
+        <div class="bg-dark-800 border border-dark-500 rounded-2xl p-6">
+          <div class="w-12 h-12 rounded-xl bg-purple-500/15 border border-purple-500/20
+                      flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z"/>
+            </svg>
+          </div>
+          <h3 class="text-white font-bold text-lg mb-2">Video Generation</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Create short AI videos up to 8 seconds. Fast or HD quality.
+            Download MP4 files ready to use.
+          </p>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PAGE: Register
+  ═══════════════════════════════════════════════════════ -->
+  <div id="page-register" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md fade-in">
+
+      <div class="bg-dark-800 border border-dark-500 rounded-2xl p-8 shadow-2xl">
+
+        <!-- Back -->
+        <button onclick="showPage('landing')"
+          class="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors duration-200 group">
+          <svg class="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+          </svg>
+          Back
+        </button>
+
+        <!-- Header -->
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold text-white mb-1">Get Your API Key</h2>
+          <p class="text-gray-400 text-sm">Enter your details to get instant access.</p>
+        </div>
+
+        <!-- Form -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Your Name</label>
+            <input id="reg-name" type="text" placeholder="Jane Smith"
+              class="w-full bg-dark-700 border border-dark-400 rounded-xl px-4 py-3
+                     text-white placeholder-dark-300 focus:outline-none
+                     focus:ring-2 focus:ring-brand-500 focus:border-transparent
+                     transition-all duration-200 text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Email Address</label>
+            <input id="reg-email" type="email" placeholder="you@example.com"
+              class="w-full bg-dark-700 border border-dark-400 rounded-xl px-4 py-3
+                     text-white placeholder-dark-300 focus:outline-none
+                     focus:ring-2 focus:ring-brand-500 focus:border-transparent
+                     transition-all duration-200 text-sm" />
+          </div>
+
+          <!-- Error -->
+          <div id="reg-error" class="hidden bg-red-500/10 border border-red-500/30
+                                     rounded-xl px-4 py-3 text-red-400 text-sm"></div>
+
+          <!-- Submit -->
+          <button id="reg-btn" onclick="handleRegister()"
+            class="w-full bg-gradient-to-r from-brand-500 to-brand-600
+                   hover:from-brand-400 hover:to-brand-500
+                   text-white font-semibold py-3 px-6 rounded-xl
+                   transition-all duration-200 flex items-center justify-center gap-2
+                   shadow-lg shadow-brand-500/25">
+            <span id="reg-btn-text">Get Access</span>
+            <svg id="reg-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </button>
+        </div>
+
+        <p class="text-center text-dark-300 text-xs mt-4">
+          By registering, you agree to our Terms of Service.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PAGE: Key Display
+  ═══════════════════════════════════════════════════════ -->
+  <div id="page-key" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-lg fade-in text-center">
+
+      <div class="bg-dark-800 border border-dark-500 rounded-2xl p-8 shadow-2xl">
+
+        <!-- Success icon -->
+        <div class="w-16 h-16 rounded-full bg-green-500/15 border border-green-500/30
+                    flex items-center justify-center mx-auto mb-5">
+          <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+
+        <h2 class="text-2xl font-bold text-white mb-2">You're all set!</h2>
+        <p class="text-gray-400 text-sm mb-6">
+          Copy your API license key below and paste it into the desktop app.
+        </p>
+
+        <!-- Key box -->
+        <div class="bg-dark-900 border border-dark-400 rounded-xl p-4 mb-4">
+          <p class="text-xs text-gray-500 mb-2 text-left">Your API License Key</p>
+          <div class="flex items-center gap-3">
+            <code id="key-display"
+              class="flex-1 text-brand-400 font-mono text-sm break-all text-left leading-relaxed">
+              —
+            </code>
+            <button id="copy-btn" onclick="copyKey()"
+              class="copy-btn flex-shrink-0 bg-brand-600 hover:bg-brand-500 text-white
+                     text-xs font-bold px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap">
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <!-- Warning -->
+        <div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 mb-6 text-left">
+          <p class="text-yellow-400 text-xs">
+            ⚠️ <strong>Save this key.</strong> It won't be shown again.
+            If you lose it, register again with the same email to retrieve it.
+          </p>
+        </div>
+
+        <!-- Steps -->
+        <div class="text-left space-y-3 mb-6">
+          <p class="text-sm font-semibold text-white">Next steps:</p>
+          <div class="flex items-start gap-3">
+            <span class="w-6 h-6 rounded-full bg-brand-500/20 text-brand-400 text-xs
+                         font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+            <p class="text-gray-400 text-sm">Download the desktop app below</p>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-6 h-6 rounded-full bg-brand-500/20 text-brand-400 text-xs
+                         font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+            <p class="text-gray-400 text-sm">Open the app and paste your key</p>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-6 h-6 rounded-full bg-brand-500/20 text-brand-400 text-xs
+                         font-bold flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+            <p class="text-gray-400 text-sm">Start creating!</p>
+          </div>
+        </div>
+
+        <!-- Download button -->
+        <a href="#" id="download-link"
+          class="block w-full bg-dark-700 hover:bg-dark-600 border border-dark-400
+                 text-white font-semibold py-3 px-6 rounded-xl
+                 transition-all duration-200 text-center text-sm mb-3">
+          ⬇ Download YourBrand App (Windows)
+        </a>
+
+        <button onclick="showPage('landing')"
+          class="text-sm text-dark-300 hover:text-white transition-colors duration-200">
+          ← Back to home
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       JavaScript
+  ═══════════════════════════════════════════════════════ -->
+  <script>
+    // ─── Config ──────────────────────────────────────────────
+    // Update this to your deployed backend URL in production
+    const API_BASE = 'http://localhost:3001'
+
+    let currentKey = null
+
+    // ─── Page routing ─────────────────────────────────────────
+    function showPage(name) {
+      const pages = ['landing', 'register', 'key']
+      pages.forEach(p => {
+        const el = document.getElementById(`page-${p}`)
+        if (p === name) {
+          el.classList.remove('hidden')
+          el.classList.add('flex')
+        } else {
+          el.classList.add('hidden')
+          el.classList.remove('flex')
+        }
+      })
+      window.scrollTo(0, 0)
+    }
+
+    // Initialize landing page as flex
+    document.getElementById('page-landing').classList.add('block')
+
+    // ─── Registration ─────────────────────────────────────────
+    async function handleRegister() {
+      const name  = document.getElementById('reg-name').value.trim()
+      const email = document.getElementById('reg-email').value.trim()
+      const errEl = document.getElementById('reg-error')
+      const btn   = document.getElementById('reg-btn')
+      const spinner = document.getElementById('reg-spinner')
+      const btnText = document.getElementById('reg-btn-text')
+
+      // Reset error
+      errEl.classList.add('hidden')
+      errEl.textContent = ''
+
+      // Validate
+      if (!email || !email.includes('@')) {
+        errEl.textContent = 'Please enter a valid email address.'
+        errEl.classList.remove('hidden')
+        return
+      }
+
+      // Loading state
+      btn.disabled = true
+      spinner.classList.remove('hidden')
+      btnText.textContent = 'Registering...'
+
+      try {
+        const res = await fetch(`${API_BASE}/api/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.message || data.error || 'Registration failed')
+        }
+
+        currentKey = data.license_key
+
+        // Show the key
+        document.getElementById('key-display').textContent = currentKey
+
+        // Update download link (update with real URL when app is built)
+        document.getElementById('download-link').href = '#'
+
+        showPage('key')
+
+      } catch (err) {
+        let msg = err.message
+        if (err.message.includes('fetch') || err.message.includes('Failed')) {
+          msg = 'Cannot reach server. Make sure the backend is running on port 3001.'
+        }
+        errEl.textContent = msg
+        errEl.classList.remove('hidden')
+      } finally {
+        btn.disabled = false
+        spinner.classList.add('hidden')
+        btnText.textContent = 'Get Access'
+      }
+    }
+
+    // ─── Copy key ─────────────────────────────────────────────
+    async function copyKey() {
+      if (!currentKey) return
+
+      const btn = document.getElementById('copy-btn')
+
+      try {
+        await navigator.clipboard.writeText(currentKey)
+        btn.textContent = '✓ Copied!'
+        btn.classList.add('copied')
+        setTimeout(() => {
+          btn.textContent = 'Copy'
+          btn.classList.remove('copied')
+        }, 2000)
+      } catch {
+        // Fallback for non-HTTPS
+        const el = document.getElementById('key-display')
+        const range = document.createRange()
+        range.selectNode(el)
+        window.getSelection().removeAllRanges()
+        window.getSelection().addRange(range)
+        document.execCommand('copy')
+        window.getSelection().removeAllRanges()
+        btn.textContent = '✓ Copied!'
+        setTimeout(() => { btn.textContent = 'Copy' }, 2000)
+      }
+    }
+
+    // ─── Enter key on register form ───────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const regPage = document.getElementById('page-register')
+        if (!regPage.classList.contains('hidden')) {
+          handleRegister()
+        }
+      }
+    })
+  </script>
+
+</body>
+</html>
