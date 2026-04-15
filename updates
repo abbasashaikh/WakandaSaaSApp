@@ -1,0 +1,6 @@
+
+The .docx we generated earlier needs updating with the confirmed API:
+
+Endpoint: aisandbox-pa.googleapis.com/v1/projects/{id}/flowMedia:batchGenerateImages
+Image URL field: media[0].image.generatedImage.fifeUrl
+Architecture: Playwright clicks Flow's UI, intercepts the response
