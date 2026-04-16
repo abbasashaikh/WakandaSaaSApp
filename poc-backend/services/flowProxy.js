@@ -1,7 +1,15 @@
-// services/flowProxy.js — FINAL WORKING
+// services/flowProxy.js — FINAL: Enter-key generation
 // ============================================================
-// Image URL field confirmed from live response: 
-//   body.media[0].image.generatedImage.fifeUrl
+// ROOT CAUSE FIX:
+// "button:has-text('Create')" was clicking a WRONG button —
+// Flow's toolbar "Create" button, NOT the generate arrow button.
+// 
+// The actual generate button next to the prompt box is an ICON button
+// (arrow →) with no text. It's unreliable to find by text.
+//
+// SOLUTION: Press Enter inside the prompt contenteditable box.
+// From Flow's UI, Enter triggers generation directly.
+// This is selector-proof and works regardless of UI changes.
 // ============================================================
 require('dotenv').config();
 
@@ -30,27 +38,17 @@ async function mockVideo(prompt) {
   return { success: true, output_url: MOCK_VIDEOS[Math.floor(Math.random() * MOCK_VIDEOS.length)] };
 }
 
-// ── Extract image URL from batchGenerateImages response ──────
-// Confirmed field path from live response: media[0].image.generatedImage.fifeUrl
 function extractImageUrl(body) {
   if (!body) return null;
-  const b = body;
-
-  // PRIMARY: confirmed working path from live response
-  const primary = b?.media?.[0]?.image?.generatedImage?.fifeUrl;
-  if (primary) return primary;
-
-  // FALLBACKS for other possible response shapes
   return (
-    b?.media?.[0]?.image?.generatedImage?.gcsUri          ||
-    b?.media?.[0]?.image?.generatedImage?.imageUri        ||
-    b?.media?.[0]?.image?.generatedImage?.url             ||
-    b?.media?.[0]?.video?.generatedVideo?.fifeUrl         ||
-    b?.responses?.[0]?.imageMedia?.mediaUrl               ||
-    b?.responses?.[0]?.imageMedia?.imageUrl               ||
-    b?.responses?.[0]?.image?.imageUrl                    ||
-    b?.generatedImages?.[0]?.image?.imageUrl              ||
-    b?.images?.[0]?.url                                   ||
+    body?.media?.[0]?.image?.generatedImage?.fifeUrl  ||
+    body?.media?.[0]?.image?.generatedImage?.gcsUri   ||
+    body?.media?.[0]?.image?.generatedImage?.imageUri ||
+    body?.media?.[0]?.image?.generatedImage?.url      ||
+    body?.responses?.[0]?.imageMedia?.mediaUrl        ||
+    body?.responses?.[0]?.imageMedia?.imageUrl        ||
+    body?.responses?.[0]?.image?.imageUrl             ||
+    body?.generatedImages?.[0]?.image?.imageUrl       ||
     null
   );
 }
@@ -80,6 +78,7 @@ async function browserInit() {
     args: [
       '--no-sandbox',
       '--window-size=1280,800',
+      '--window-position=-2000,0',  // Hidden off-screen
       '--disable-blink-features=AutomationControlled',
       '--no-first-run', '--no-default-browser-check',
     ],
@@ -98,54 +97,72 @@ async function browserInit() {
       domain: 'labs.google', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
   ]);
 
-  // Verify cookie with a temporary page
-  const verifyPage = await bContext.newPage();
-  await verifyPage.goto('https://labs.google/fx/api/auth/session', {
+  const vp = await bContext.newPage();
+  await vp.goto('https://labs.google/fx/api/auth/session', {
     waitUntil: 'domcontentloaded', timeout: 20000,
   });
-  const sessText = await verifyPage.evaluate(() => document.body.innerText).catch(() => '{}');
-  await verifyPage.close();
+  const txt = await vp.evaluate(() => document.body.innerText).catch(() => '{}');
+  await vp.close();
 
-  let sessData = {};
-  try { sessData = JSON.parse(sessText); } catch {}
-  if (!sessData?.user?.email) {
+  let sess = {};
+  try { sess = JSON.parse(txt); } catch {}
+  if (!sess?.user?.email) {
     await browser.close(); browser = null; bContext = null;
-    throw new Error(`Cookie rejected. Run: npm run capture\nResponse: ${sessText.slice(0,100)}`);
+    throw new Error(`Cookie rejected. Run: npm run capture\nResponse: ${txt.slice(0,100)}`);
   }
-  console.log(`[FlowProxy:BROWSER] ✅ Cookie valid — ${sessData.user.email}`);
+  console.log(`[FlowProxy:BROWSER] ✅ Session: ${sess.user.email}`);
   ready = true;
   console.log('[FlowProxy:BROWSER] ✅ Ready');
 }
 
-async function browserGenerateImage(prompt, options = {}) {
-  if (!ready) await browserInit();
-  console.log(`[FlowProxy:BROWSER] Generating: "${prompt}"`);
+async function createProject(page) {
+  console.log('[FlowProxy:BROWSER] Navigating to gallery...');
+  await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await sleep(2000);
 
-  const genPage = await bContext.newPage();
+  const url = page.url();
+  console.log(`[FlowProxy:BROWSER] Gallery URL: ${url}`);
 
-  try {
-    // Step 1: Create project
-    await genPage.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await sleep(2000);
+  if (url.includes('accounts.google.com')) {
+    throw new Error('Session expired. Run: npm run capture');
+  }
+  if (url.includes('/project/')) {
+    await page.goto(FLOW_URL, { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {});
+    await sleep(1500);
+  }
 
-    if (genPage.url().includes('accounts.google.com')) {
-      throw new Error('Cookie expired. Run: npm run capture');
-    }
-
-    const projResult = await genPage.evaluate(async () => {
+  const result = await page.evaluate(async () => {
+    try {
       const r = await fetch('https://labs.google/fx/api/trpc/project.createProject', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ json: { projectTitle: new Date().toLocaleString(), toolName: 'PINHOLE' } }),
       });
       const d = await r.json();
-      return { status: r.status, projectId: d?.result?.data?.json?.result?.projectId };
-    });
+      return { status: r.status, projectId: d?.result?.data?.json?.result?.projectId, raw: JSON.stringify(d).slice(0,200) };
+    } catch (e) { return { status: 0, error: e.message }; }
+  });
 
-    if (!projResult.projectId) throw new Error(`project.createProject failed (${projResult.status})`);
-    console.log(`[FlowProxy:BROWSER] Project: ${projResult.projectId}`);
+  if (result.error) throw new Error(`createProject: ${result.error}`);
+  if (result.status !== 200 || !result.projectId) {
+    throw new Error(`project.createProject failed (${result.status}): ${result.raw}`);
+  }
+  console.log(`[FlowProxy:BROWSER] Project: ${result.projectId}`);
+  return result.projectId;
+}
 
-    // Step 2: Set up response interceptor
+async function browserGenerateImage(prompt, options = {}) {
+  if (!ready) await browserInit();
+  console.log(`[FlowProxy:BROWSER] ── Generating: "${prompt}" ──`);
+
+  const genPage = await bContext.newPage();
+
+  try {
+    // Step 1: Create project
+    const projectId = await createProject(genPage);
+
+    // Step 2: Wire interceptor BEFORE navigating to project page
     let resolveUrl, rejectUrl;
     const urlPromise = new Promise((res, rej) => { resolveUrl = res; rejectUrl = rej; });
 
@@ -161,77 +178,167 @@ async function browserGenerateImage(prompt, options = {}) {
         }
         console.log(`[FlowProxy:BROWSER] Body: ${JSON.stringify(body).slice(0,300)}`);
         const url = extractImageUrl(body);
-        if (url) {
-          console.log(`[FlowProxy:BROWSER] ✅ Image URL: ${url.slice(0,80)}...`);
-          resolveUrl(url);
-        } else {
+        if (url) { resolveUrl(url); }
+        else {
           console.log('[FlowProxy:BROWSER] FULL RESPONSE:', JSON.stringify(body));
-          rejectUrl(new Error('URL not found — see FULL RESPONSE above'));
+          rejectUrl(new Error('URL not found — FULL RESPONSE logged'));
         }
       } catch (e) { rejectUrl(e); }
     });
 
-    // Step 3: Navigate to project page
-    const projectUrl = `${FLOW_URL}/project/${projResult.projectId}`;
-    console.log('[FlowProxy:BROWSER] Loading project page...');
+    // Step 3: Navigate to project page, wait for FULL load
+    const projectUrl = `${FLOW_URL}/project/${projectId}`;
+    console.log(`[FlowProxy:BROWSER] Loading project...`);
     await genPage.goto(projectUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await sleep(4000);
+    await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+    await sleep(3000);
 
-    // Step 4: Type prompt
-    let typed = false;
-    for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
+    // Step 4: Wait for the prompt input to be visible and interactive
+    console.log('[FlowProxy:BROWSER] Waiting for prompt input...');
+    let inputEl   = null;
+    let inputSel  = '';
+    const inputSelectors = [
+      '[contenteditable="true"]',
+      'textarea[placeholder]',
+      '[role="textbox"]',
+      'textarea',
+    ];
+    for (const sel of inputSelectors) {
       try {
+        await genPage.waitForSelector(sel, { state: 'visible', timeout: 10000 });
         const el = await genPage.$(sel);
         if (el && await el.isVisible().catch(() => false)) {
-          await el.click(); await sleep(500);
-          await genPage.keyboard.press('Control+A');
-          await el.type(prompt, { delay: 30 });
-          await sleep(500);
-          typed = true;
-          console.log(`[FlowProxy:BROWSER] Typed into: ${sel}`);
+          inputEl  = el;
+          inputSel = sel;
           break;
         }
       } catch {}
     }
-    if (!typed) throw new Error('Prompt input not found');
-    await sleep(800);
+    if (!inputEl) throw new Error('Prompt input not found after 10s');
+    console.log(`[FlowProxy:BROWSER] Input: ${inputSel}`);
 
-    // Step 5: Click Generate
-    await genPage.mouse.move(640, 400); await sleep(300);
+    // Step 5: Click to focus, clear, type prompt
+    await inputEl.click();
+    await sleep(400);
+    await genPage.keyboard.press('Control+A');
+    await sleep(100);
+    await inputEl.type(prompt, { delay: 40 });
+    await sleep(500);
+
+    // Fire native input/change events for React
+    await genPage.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, inputSel);
+
+    await sleep(600);
+    console.log(`[FlowProxy:BROWSER] Prompt typed: "${prompt}"`);
+
+    // ── Step 6: TRIGGER GENERATION ────────────────────────────
+    // Strategy A: Press Enter in the prompt box (most reliable)
+    // The Flow generate button is an icon (arrow →) with no text.
+    // "button:has-text('Create')" clicks the WRONG toolbar button.
+    // Enter key directly in the prompt box triggers generation safely.
+
+    console.log('[FlowProxy:BROWSER] Pressing Enter to generate...');
+    await inputEl.press('Enter');
+    await sleep(500);
+
+    // Strategy B: If Enter didn't work, look for the arrow button 
+    // next to the input box (icon button, sibling of input)
+    const arrowButtonSelectors = [
+      // Arrow/send icon buttons near the input
+      '[aria-label*="run" i]',
+      '[aria-label*="generate" i]', 
+      '[aria-label*="send" i]',
+      '[aria-label*="submit" i]',
+      // Material icon buttons
+      'button:has(svg[data-icon*="arrow"])',
+      'button:has(svg[data-icon*="send"])',
+      // Button immediately after the contenteditable (sibling)
+      '[contenteditable="true"] ~ button',
+      '[contenteditable="true"] + button',
+      // Last button in the prompt container row
+      'div:has([contenteditable="true"]) button:last-child',
+      'div:has(textarea) button:last-child',
+    ];
+
+    // Check if batchGenerateImages fired within 5s of Enter
+    // If not, try clicking the arrow button
+    const quickCheck = await Promise.race([
+      urlPromise.then(u => ({ type: 'url', url: u })).catch(e => ({ type: 'error', error: e })),
+      sleep(5000).then(() => ({ type: 'timeout' })),
+    ]);
+
+    if (quickCheck.type === 'url') {
+      // Enter worked! Return the URL
+      console.log(`[FlowProxy:BROWSER] ✅ Enter triggered generation`);
+      console.log(`[FlowProxy:BROWSER] ✅ Image: ${quickCheck.url}`);
+      return { success: true, output_url: quickCheck.url, metadata: { projectId } };
+    }
+
+    if (quickCheck.type === 'error') {
+      throw new Error(quickCheck.error.message);
+    }
+
+    // Enter didn't trigger in 5s — try arrow button selectors
+    console.log('[FlowProxy:BROWSER] Enter did not trigger immediately — trying arrow button...');
+
+    // Log all buttons on page for debugging
+    const allBtns = await genPage.evaluate(() =>
+      Array.from(document.querySelectorAll('button, [role="button"]'))
+        .map(b => ({
+          text:  b.innerText?.trim().slice(0, 30),
+          aria:  b.getAttribute('aria-label'),
+          title: b.getAttribute('title'),
+          cls:   b.className?.slice(0, 50),
+        }))
+        .filter(b => b.text || b.aria || b.title)
+    );
+    console.log(`[FlowProxy:BROWSER] All buttons: ${JSON.stringify(allBtns).slice(0, 500)}`);
+
+    await genPage.mouse.move(640, 400);
+    await sleep(300);
+
     let clicked = false;
-    for (const sel of [
-      'button:has-text("Generate")', 'button:has-text("Create")',
-      'button:has-text("Run")', '[aria-label*="enerate"]', 'button[type="submit"]',
-    ]) {
+    for (const sel of arrowButtonSelectors) {
       try {
         const el = await genPage.$(sel);
         if (el && await el.isVisible().catch(() => false)) {
           const box = await el.boundingBox();
           if (box) {
-            await genPage.mouse.move(box.x + box.width/2, box.y + box.height/2);
+            await genPage.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
             await sleep(200);
-            await el.click(); clicked = true;
-            console.log(`[FlowProxy:BROWSER] Clicked: ${sel}`); break;
+            await el.click();
+            clicked = true;
+            console.log(`[FlowProxy:BROWSER] Clicked arrow: ${sel}`);
+            break;
           }
         }
       } catch {}
     }
-    if (!clicked) {
-      for (const sel of ['[contenteditable="true"]', 'textarea']) {
-        try { const el = await genPage.$(sel); if (el) { await el.press('Enter'); clicked = true; break; } } catch {}
-      }
-    }
-    if (!clicked) throw new Error('Generate button not found');
-    console.log('[FlowProxy:BROWSER] Waiting for image (120s)...');
 
-    // Step 6: Wait for intercepted image URL
+    if (!clicked) {
+      console.log('[FlowProxy:BROWSER] No arrow button found — trying Enter again...');
+      await inputEl.focus();
+      await sleep(200);
+      await genPage.keyboard.press('Enter');
+    }
+
+    // Step 7: Wait for the image URL (full 120s timeout)
+    console.log('[FlowProxy:BROWSER] Waiting for generation result (up to 120s)...');
     const imageUrl = await Promise.race([
       urlPromise,
-      sleep(120000).then(() => { throw new Error('Timed out after 120s'); }),
+      sleep(120000).then(() => {
+        throw new Error('Timed out — batchGenerateImages never responded');
+      }),
     ]);
 
     console.log(`[FlowProxy:BROWSER] ✅ Image: ${imageUrl}`);
-    return { success: true, output_url: imageUrl, metadata: { projectId: projResult.projectId } };
+    return { success: true, output_url: imageUrl, metadata: { projectId } };
 
   } finally {
     await genPage.close().catch(() => {});
