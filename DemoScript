@@ -1,0 +1,279 @@
+AI Creative Studio POC — Complete Demo Package
+
+TASK 1 — DEMO SCRIPT (Explain Like I'm 5–7 Years Old)
+Total speaking time: ~6 minutes
+
+🎬 OPENING — "The Problem" (60 seconds)
+
+Speak slowly, warm smile, make eye contact
+
+"Imagine you run a bakery. 🍰
+Every day, customers walk in and say — 'I want a cake that looks like a sunset over mountains.'
+And you think — that sounds amazing! But here's the problem. You only have one master baker. One person. And making that exact cake takes time, skill, and special ingredients only your baker knows.
+Now imagine hundreds of customers coming in every day — all wanting different, beautiful, custom cakes.
+Your one baker... is exhausted. Customers are waiting. Some leave. Some complain.
+That's the exact problem our product solves — but instead of cakes, we're creating AI-generated images.
+Right now, there's a powerful AI image kitchen run by Google — called Flow. It can make stunning images from just a sentence. But only the person who owns the kitchen can use it. There's no way to let your customers order from it — through your own app, with your own brand.
+Until today."
+
+⚙️ MIDDLE — "How It Works" (3 minutes)
+
+Now show the screen — Electron app open, ready to generate
+
+"Let me show you what we built.
+Think of our system like a magical restaurant with three rooms. 🏠
+Room 1 — The Front Desk (point to Electron app dashboard)
+This is the beautiful counter where customers walk in. They see your brand — your name, your colors. They type in what they want. In our demo, I'll type: 'a red apple on a white table.'
+They press the button. That's it. They don't see anything complicated. Just a clean, beautiful screen.
+(Click Generate)
+Room 2 — The Kitchen (narrate while image generates)
+Behind the scenes — invisible to the customer — our system does something remarkable.
+It's like a very well-trained robot butler 🤖 who knows a secret passageway to Google's AI kitchen.
+The butler walks through that passageway, goes to the kitchen, whispers your customer's order, waits while the kitchen creates the image, then picks up the finished picture and runs back through the passageway — all in about 30 seconds.
+The customer never sees the passageway. They never see the kitchen. They just see... (wait for image to appear) ...
+their image. Ready. Done. Beautiful.
+(Image appears on screen)
+Room 3 — The Delivery Counter (point to completed image)
+The customer sees their image. They can download it. They can generate another one. They never had to log in to Google. They never had to pay Google. They never even know Google was involved.
+All they know is — your app made them something magical.
+
+Now, here's what makes this a business, not just a toy.
+Imagine that same restaurant — but instead of one table, you have 100 customers ordering at the same time.
+Our system has what we call a ticket queue — think of it like a deli counter number system. 🎫
+Each customer gets a number. The kitchen handles them one at a time. Nobody crashes into each other. Nobody's order gets lost. Everyone gets their result — in order, perfectly delivered.
+And our system has a night watchman 🌙 — a little program that checks every 10 minutes to make sure the passageway to Google's kitchen is still open. If it ever closes, he reopens it quietly. Customers never feel a thing."
+
+🎯 CLOSING — "What's Better Now" (90 seconds)
+
+Smile, speak with confidence
+
+"So let's recap what just happened.
+Before this POC:
+❌ You couldn't offer AI image generation to your own customers.
+❌ Every customer would need their own Google account.
+❌ You had no branded experience — just sending people to someone else's website.
+❌ Zero control. Zero brand. Zero business.
+After this POC:
+✅ Your customers open your app.
+✅ They type a sentence.
+✅ A real AI image appears — powered by Google, but delivered by you.
+✅ Your brand. Your control. Your revenue.
+This is a Proof of Concept — meaning we've proven the idea works. The restaurant is open, the kitchen is connected, and the butler knows the route.
+The next step is simply making it bigger — adding payments, adding more customers, adding more features.
+The hard part? Already done. Today. Right here.
+Thank you."
+TASK 2 — DEMO DOCUMENT WITH DIAGRAMS
+
+🖼️ "AI Creative Studio POC — A Simple Picture Story"
+Print this page or show on screen during your demo
+
+SECTION 1 — THE PROBLEM 😟
+Diagram to draw / recreate in Canva/PowerPoint:
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  😕 Customer 1        😕 Customer 2        😕 Customer 3   │
+│  "I want an image!"   "Me too!"            "And me!"        │
+│       │                    │                    │           │
+│       └────────────────────┴────────────────────┘           │
+│                            │                                │
+│                            ▼                                │
+│                    🔒 GOOGLE FLOW                           │
+│                   (Only owner can use)                      │
+│                            │                                │
+│                     ❌ BLOCKED                              │
+│              Customers can't access it                      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+Drawing notes: Draw 3 stick figures at the top looking confused (question marks above heads). Draw a big locked door in the middle labeled "Google AI Kitchen 🔒". Draw a red X across the door. Draw a frowning face below.
+Caption: "Customers want AI images. But the AI tool is locked. They can't get in."
+
+SECTION 2 — THE SOLUTION ✨
+Diagram to draw / recreate:
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   CUSTOMER                                                  │
+│   types prompt          YOUR APP                           │
+│   "a red apple"  ──►  [Dashboard]  ──►  🤖 Robot Butler   │
+│        😊           (Your brand!)        (Playwright)       │
+│                                               │             │
+│                                               ▼             │
+│                                    🔓 GOOGLE FLOW          │
+│                                    (Secret passageway)      │
+│                                               │             │
+│                                               ▼             │
+│                                       🎨 AI generates      │
+│                                          image              │
+│                                               │             │
+│                                               ▼             │
+│   CUSTOMER                                                  │
+│   sees image    ◄──  [Your App]  ◄──  📦 Image delivered  │
+│      😍                                                     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+Drawing notes: Draw this as a simple left-to-right flow with arrows. Use a robot emoji for the automation step. Show a locked door now OPEN (with a key 🗝️). Use a paint palette 🎨 for the Google AI step. End with a smiling customer holding a picture frame.
+Caption: "Our system acts as a smart middleman — invisible to the customer, powerful behind the scenes."
+
+SECTION 3 — WHAT'S BETTER NOW 🚀
+Before vs After table — easy to recreate as a 2-column table:
+😞 BEFORE😊 AFTERCustomer needs Google accountCustomer just opens your appNo branded experienceYour logo, your colors everywhereCan't offer AI images as a serviceSell AI images to your customersManual, one-by-one, no queueAutomatic queue handles 100s of requestsSession expires, everything breaksAuto-watchman keeps connection aliveYou depend on Google's interfaceYou own the customer experience❌ No business model✅ Ready for payments + launch
+Visual enhancement notes: In PowerPoint/Canva, color the BEFORE column red/pink and the AFTER column green. Add a large arrow ➡️ between columns. Put your app's name/logo at the top.
+
+THE FLOW IN 4 BOXES (simple flowchart)
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+  │   CUSTOMER   │     │   YOUR APP   │     │  ROBOT       │     │   GOOGLE     │
+  │              │     │              │     │  BUTLER      │     │   AI KITCHEN │
+  │ Types prompt │────►│ Queues the   │────►│ Opens secret │────►│ Creates the  │
+  │ "red apple"  │     │ request      │     │ passageway   │     │ image 🎨     │
+  │              │     │ (ticket #42) │     │ & orders     │     │              │
+  └──────────────┘     └──────────────┘     └──────────────┘     └──────┬───────┘
+                                                                         │
+         ◄───────────────────────────────────────────────────────────────┘
+         Image delivered back to customer in ~30 seconds ✅
+
+
+TASK 3 — VIDEO PRODUCTION PLAN 🎬
+🛠️ Tools You Need (All Free)
+ToolPurposeWhere to getOBS StudioScreen recordingobsproject.comLoom (alternative)Easier, browser-based recordingloom.comDaVinci ResolveFree video editingblackmagicdesign.comCapCut DesktopEasiest editing, auto-captionscapcut.comCanvaAnimated slides between scenescanva.comCamo or iPhoneGood webcam/face-camreincubate.com/camo
+
+📋 VIDEO CREATION CHECKLIST
+PHASE 1 — PREPARE (30 minutes)
+
+ Open your Electron app and resize it to fill 80% of screen
+ Open backend in a separate window (hidden during recording)
+ Have your prompt ready: "a stunning mountain sunset"
+ Close all other apps, browser tabs, notifications
+ Set Windows to Do Not Disturb mode
+ Prepare a glass of water (for your voice)
+ Use a USB microphone or headset — laptop mics sound hollow
+
+
+PHASE 2 — RECORD (video structure + timing)
+Total target video length: 4–5 minutes
+TimeWhat's on screenWhat you say0:00–0:20Title slide: "AI Creative Studio POC" with your logo"Today I'm going to show you something that used to be impossible for small businesses..."0:20–0:50Diagram — THE PROBLEM (Section 1 from above)Read the Opening script0:50–1:30Switch to live Electron app — Dashboard screen"This is what your customer sees. Clean. Simple. Branded."1:30–2:00Type prompt into image generation screen"They type what they want — 'a stunning mountain sunset'"2:00–2:30Click Generate — show loading animation"They press one button. Behind the scenes, our robot butler gets to work..."2:30–3:00Show the Chrome window briefly (or cut if too technical)"...finding the best AI kitchen, placing the order..."3:00–3:30Image appears in Electron app"...and 30 seconds later — here it is. A real AI image."3:30–4:00Show Download button, click it"One click to download. Done."4:00–4:30Switch to Before/After comparison slideRead the Closing script4:30–5:00Final slide: "POC Complete ✅ — Ready for Next Phase""The foundation is built. The kitchen is open. Let's grow."
+
+PHASE 3 — RECORD SETTINGS
+In OBS Studio:
+
+Resolution: 1920×1080
+Frame rate: 30fps
+Audio: Microphone only (no desktop sound unless adding music in edit)
+Scene: "Display Capture" for your main monitor
+
+Voice tips:
+
+Speak 30% slower than normal conversation
+Pause for 2 full seconds after each key point
+Smile while speaking — it changes your tone even on audio
+Say "notice how..." before each screen interaction (draws attention)
+
+
+PHASE 4 — EDIT IN CAPCUT (easiest option)
+
+ Import your recording
+ Add Auto Captions (CapCut does this in one click)
+ Add zoom-in effect when image appears (punch-in animation, 1.2x zoom)
+ Add a subtle background music track — search "corporate upbeat" in CapCut's free library, volume at 15%
+ Add arrow/pointer animations when clicking buttons (CapCut stickers → arrow)
+ Add text callout bubbles like "30 seconds!" when image appears
+ Trim any dead air or mistakes
+ Export at 1080p MP4
+
+
+PHASE 5 — MAKE IT ENGAGING
+TechniqueHow to do itOpen with a question"What if any business could offer AI images in their own app?"Show the magic momentSlow down your narration as the image loads — build suspenseUse the customer's wordsSay "your customer types..." not "the user inputs..."Reaction shotAfter image appears, pause 3 seconds silently — let them absorb itEnd with a next stepNever end on "that's it" — end on "and next we add payments"Music fadeFade music out in the last 10 seconds for a professional finish
+
+THE CORRECT ARCHITECTURE
+┌─────────────────────────────────────────────────────────────────────┐
+│                    WHAT USER SEES                                   │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │           YOUR ELECTRON APP (poc-electron)                   │   │
+│  │  User types prompt → clicks Generate → sees loading → image  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │ HTTP API calls
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   WHAT USER NEVER SEES                              │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  poc-backend (Node.js + Express + BullMQ)                    │   │
+│  │  ┌─────────────────────────────────────────────────────┐    │   │
+│  │  │  flowProxy.js → Playwright → Chrome (HIDDEN)        │    │   │
+│  │  │  - Cookie injected (no login screen)                │    │   │
+│  │  │  - Navigates to Flow project page                   │    │   │
+│  │  │  - Types prompt + clicks Generate automatically     │    │   │
+│  │  │  - Intercepts batchGenerateImages response          │    │   │
+│  │  │  - Returns fifeUrl image URL                        │    │   │
+│  │  └─────────────────────────────────────────────────────┘    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+Que. How to hide Chrome completely
+The key line is --window-position=-2000,0. This places the Chrome window 2000 pixels to the LEFT of your screen — completely off-screen but still running and rendering. The user never sees it.
+javascriptargs: [
+  '--window-size=1280,800',
+  '--window-position=-2000,0',   // ← Off-screen left
+]
+--------------------------------------------------------------
+ Best architecture for smooth demo
+Demo sequence (everything automatic):
+
+1. User types "a stunning forest" in Electron app
+2. User clicks Generate in Electron
+3. Electron → POST /api/generate/image (with X-License-Key)
+4. Backend creates BullMQ job → responds 202 immediately
+5. Electron shows loading skeleton
+6. Worker picks up job → calls flowProxy.generateImage()
+7. flowProxy:
+   a. Opens off-screen Chrome (invisible)
+   b. Creates Flow project (via fetch in page context)
+   c. Navigates to project page
+   d. Waits for networkidle (React fully mounted)
+   e. Types prompt (with real keyboard events)
+   f. Clicks Generate (with hover + scroll into view)
+   g. Intercepts batchGenerateImages response
+   h. Extracts fifeUrl
+8. Job marked completed with output_url
+9. Electron polls every 3s → gets completed + URL
+10. Image renders in Electron app
+11. Chrome page closes (genPage.close())
+
+Total time: 30–45 seconds
+User sees: loading animation → image
+User never sees: Chrome, Flow, Google, API calls
+
+                      Q6 — Minimum required before client demo
+Must have (do these now):
+✅ Replace flowProxy.js with this demo-stable version
+✅ Test 3 generations in a row without restart  
+✅ Confirm Chrome window is off-screen (not visible)
+✅ Fresh session cookie (run npm run capture if last capture > 7 days ago)
+✅ Have mock mode ready as fallback (FLOW_MODE=mock in .env)
+Nice to have (do if time permits):
+⬜ Add a "Generating..." progress message in Electron (already has skeleton)
+⬜ Set a 60s job timeout that shows a friendly error message
+⬜ Test on the EXACT machine you'll demo on (not your dev machine)
+
+PART 5 — Demo Day Checklist
+NIGHT BEFORE:
+□ Run: npm run capture (refresh session cookie)
+□ Run: npm start → generate one test image → confirm it works
+□ Set FLOW_MODE=browser in .env
+□ Close all other Chrome windows on the demo machine
+
+MORNING OF DEMO:
+□ Start poc-backend: npm start
+□ Wait for "✅ Ready" message
+□ Start poc-electron: npm run dev  
+□ Generate one "warm up" image (first generation is slightly slower)
+□ Minimize/hide the backend terminal
+
+DURING DEMO:
+□ Show ONLY the Electron window
+□ Type a clear, visual prompt: "a golden sunset over mountains"
+□ Click Generate — say "it's working now..."
+□ While loading (30s): explain the business value
+□ Image appears → "and there it is"
+
+FALLBACK PLAN (if anything breaks):
+□ Switch .env to FLOW_MODE=mock → restart npm start
+□ Mock returns in 4 seconds, looks identical to the real thing
+□ Say "let me show you the faster preview mode" — nobody will know
