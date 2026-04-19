@@ -4,30 +4,27 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { generateVideo, startPolling } from '../api'
 
-// ─── Sub-components ───────────────────────────────────────────
+// ── Sub-components ────────────────────────────────────────────
 
 function VideoProgress({ elapsed }) {
-  const percent = Math.min((elapsed / 90) * 100, 95) // Cap at 95% until done
-
+  const percent = Math.min((elapsed / 360) * 100, 95)
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-6 p-8">
-      {/* Animated icon */}
       <div className="relative">
         <div className="w-20 h-20 rounded-full border-2 border-dark-500 flex items-center justify-center">
-          <div className="w-16 h-16 rounded-full border-2 border-brand-500/30 animate-ping absolute" />
-          <svg className="w-9 h-9 text-brand-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 rounded-full border-2 border-purple-500/30 animate-ping absolute" />
+          <svg className="w-9 h-9 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z" />
+              d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72
+                 M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9
+                 A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z" />
           </svg>
         </div>
       </div>
-
       <div className="text-center">
         <p className="text-white font-semibold text-lg mb-1">Generating video...</p>
         <p className="text-gray-400 text-sm">This may take 1–2 minutes</p>
       </div>
-
-      {/* Progress bar */}
       <div className="w-full max-w-sm">
         <div className="flex justify-between text-xs text-gray-500 mb-2">
           <span>Processing</span>
@@ -35,7 +32,7 @@ function VideoProgress({ elapsed }) {
         </div>
         <div className="h-2 bg-dark-600 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-brand-500 to-purple-500 rounded-full transition-all duration-1000"
+            className="h-full bg-gradient-to-r from-purple-500 to-brand-500 rounded-full transition-all duration-1000"
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -48,10 +45,13 @@ function VideoProgress({ elapsed }) {
 function EmptyCanvas() {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-3 select-none">
-      <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-dark-400 flex items-center justify-center">
+      <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-dark-400
+                      flex items-center justify-center">
         <svg className="w-8 h-8 text-dark-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-            d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z" />
+            d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72
+               M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9
+               A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z" />
         </svg>
       </div>
       <p className="text-dark-300 text-sm">Enter a prompt to generate a video</p>
@@ -60,16 +60,95 @@ function EmptyCanvas() {
 }
 
 function VideoResult({ url, onDownload }) {
+  const videoRef = useRef(null)
+  const [videoError, setVideoError] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  useEffect(() => {
+    // Reset state when URL changes
+    setVideoError(false)
+    setIsPlaying(false)
+  }, [url])
+
+  function handleVideoError(e) {
+    console.error('[VideoPage] Video load error:', e)
+    setVideoError(true)
+  }
+
+  function handleVideoLoaded() {
+    // Attempt to play once loaded
+    videoRef.current?.play().then(() => {
+      setIsPlaying(true)
+    }).catch(err => {
+      console.warn('[VideoPage] Autoplay blocked:', err.message)
+      // Autoplay was blocked — user must click play manually
+      // This is normal — the controls are shown
+    })
+  }
+
+  function togglePlay() {
+    if (!videoRef.current) return
+    if (videoRef.current.paused) {
+      videoRef.current.play()
+      setIsPlaying(true)
+    } else {
+      videoRef.current.pause()
+      setIsPlaying(false)
+    }
+  }
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-4">
-      <video
-        src={url}
-        controls
-        autoPlay
-        loop
-        className="max-w-full max-h-full rounded-xl shadow-2xl animate-fade-in"
-        style={{ maxHeight: 'calc(100% - 60px)' }}
-      />
+      {videoError ? (
+        // Fallback if video cannot be loaded
+        <div className="flex-1 w-full max-w-3xl flex flex-col items-center justify-center
+                        bg-dark-800 rounded-xl border border-dark-500 gap-4">
+          <svg className="w-12 h-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72
+                 M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9
+                 A2.25 2.25 0 002.25 9.75v9A2.25 2.25 0 004.5 18.75z" />
+          </svg>
+          <p className="text-white font-semibold">Video generated ✓</p>
+          <p className="text-gray-400 text-sm text-center max-w-xs">
+            Preview unavailable in this environment.
+            Click Download to save the video.
+          </p>
+        </div>
+      ) : (
+        /* Video player */
+        <div className="relative flex-1 w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+          <video
+            ref={videoRef}
+            src={url}
+            muted          // Required for autoplay in Chromium
+            loop
+            playsInline
+            controls       // Show native controls as fallback
+            onLoadedData={handleVideoLoaded}
+            onError={handleVideoError}
+            className="w-full h-full object-contain rounded-xl shadow-2xl animate-fade-in bg-dark-800"
+            style={{ maxHeight: 'calc(100vh - 220px)' }}
+          />
+          {/* Click-to-play overlay (shown until first play) */}
+          {!isPlaying && !videoError && (
+            <button
+              onClick={togglePlay}
+              className="absolute inset-0 flex items-center justify-center
+                         bg-black/30 rounded-xl hover:bg-black/40 transition-colors group"
+            >
+              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm
+                              flex items-center justify-center
+                              group-hover:bg-white/30 transition-colors">
+                <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </button>
+          )}
+        </div>
+      )}
+
       <button
         onClick={onDownload}
         className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white
@@ -98,40 +177,33 @@ function ErrorCanvas({ message, onRetry }) {
         <p className="text-red-400 font-medium">Video generation failed</p>
         <p className="text-gray-500 text-sm mt-1 max-w-xs">{message}</p>
       </div>
-      <button onClick={onRetry} className="text-sm text-brand-400 hover:text-brand-300 underline underline-offset-2">
+      <button onClick={onRetry}
+        className="text-sm text-brand-400 hover:text-brand-300 underline underline-offset-2">
         Try again
       </button>
     </div>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────
 
 export default function VideoPage() {
-  const navigate = useNavigate()
-  const licenseKey = useAppStore((s) => s.licenseKey)
-  const addJob = useAppStore((s) => s.addJob)
-  const updateJobStore = useAppStore((s) => s.updateJob)
+  const navigate        = useNavigate()
+  const licenseKey      = useAppStore((s) => s.licenseKey)
+  const addJob          = useAppStore((s) => s.addJob)
+  const updateJobStore  = useAppStore((s) => s.updateJob)
 
-  const [prompt, setPrompt] = useState('')
-  const [duration, setDuration] = useState(8)
-  const [quality, setQuality] = useState('fast')
-  const [status, setStatus] = useState('idle')
+  const [prompt,    setPrompt]    = useState('')
+  const [duration,  setDuration]  = useState(8)
+  const [quality,   setQuality]   = useState('fast')
+  const [status,    setStatus]    = useState('idle')
   const [outputUrl, setOutputUrl] = useState(null)
-  const [errorMsg, setErrorMsg] = useState('')
-  const [elapsed, setElapsed] = useState(0)
+  const [errorMsg,  setErrorMsg]  = useState('')
+  const [elapsed,   setElapsed]   = useState(0)
 
   const stopPollingRef = useRef(null)
-  const timerRef = useRef(null)
-  const textareaRef = useRef(null)
-
-  // Cleanup polling and timer when component unmounts
-  useEffect(() => {
-    return () => {
-      stopPollingRef.current?.()
-      clearInterval(timerRef.current)
-    }
-  }, [])
+  const timerRef       = useRef(null)
+  const textareaRef    = useRef(null)
 
   async function handleSubmit(e) {
     e?.preventDefault()
@@ -146,13 +218,10 @@ export default function VideoPage() {
     setErrorMsg('')
     setElapsed(0)
 
-    // Start elapsed timer
-    timerRef.current = setInterval(() => {
-      setElapsed(prev => prev + 1)
-    }, 1000)
+    timerRef.current = setInterval(() => setElapsed(prev => prev + 1), 1000)
 
     try {
-      const res = await generateVideo(licenseKey, { prompt: trimmed, duration, quality })
+      const res   = await generateVideo(licenseKey, { prompt: trimmed, duration, quality })
       const jobId = res.job_id
       addJob({ job_id: jobId, type: 'video', status: 'queued', prompt: trimmed })
 
@@ -182,29 +251,28 @@ export default function VideoPage() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
   }
 
   async function handleDownload() {
     if (!outputUrl) return
     try {
-      // Fetch as blob so Electron saves the file instead of opening a new page
-      const res = await fetch(outputUrl)
-      const blob = await res.blob()
+      // Fetch as blob so Electron saves the file instead of opening in browser
+      const resp = await fetch(outputUrl)
+      const blob = await resp.blob()
       const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = blobUrl
+      a.href     = blobUrl
       a.download = `yourbrand-video-${Date.now()}.mp4`
-      document.body.appendChild(a)
       a.click()
-      document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
-    } catch (err) {
-      // Fallback: open in new tab
-      window.open(outputUrl, '_blank')
+    } catch {
+      // Fallback: open directly
+      const a = document.createElement('a')
+      a.href     = outputUrl
+      a.download = `yourbrand-video-${Date.now()}.mp4`
+      a.target   = '_blank'
+      a.click()
     }
   }
 
@@ -224,8 +292,10 @@ export default function VideoPage() {
           onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors duration-200 group"
         >
-          <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform"
+               fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           <span className="text-sm font-medium">Dashboard</span>
         </button>
@@ -243,7 +313,7 @@ export default function VideoPage() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Generating video... {elapsed}s
+            Generating... {elapsed}s
           </div>
         )}
         {status === 'completed' && (
@@ -256,7 +326,7 @@ export default function VideoPage() {
         )}
       </div>
 
-      {/* Canvas area */}
+      {/* Canvas */}
       <div className="flex-1 bg-dark-900 overflow-hidden">
         {status === 'idle'      && <EmptyCanvas />}
         {status === 'loading'   && <VideoProgress elapsed={elapsed} />}
@@ -267,8 +337,6 @@ export default function VideoPage() {
       {/* Bottom bar */}
       <div className="bg-dark-800 border-t border-dark-500 px-4 py-3 flex-shrink-0">
         <form onSubmit={handleSubmit} className="flex items-end gap-3 max-w-4xl mx-auto">
-
-          {/* Prompt */}
           <div className="flex-1 relative">
             <textarea
               ref={textareaRef}
@@ -290,45 +358,25 @@ export default function VideoPage() {
           {/* Duration */}
           <div className="flex-shrink-0 flex items-center gap-1 bg-dark-700 border border-dark-400 rounded-xl p-1">
             {[4, 8].map(d => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDuration(d)}
-                disabled={status === 'loading'}
+              <button key={d} type="button" onClick={() => setDuration(d)} disabled={status === 'loading'}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
-                  ${duration === d
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white'
-                  }`}
-              >
-                {d}s
-              </button>
+                  ${duration === d ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >{d}s</button>
             ))}
           </div>
 
           {/* Quality */}
           <div className="flex-shrink-0 flex items-center gap-1 bg-dark-700 border border-dark-400 rounded-xl p-1">
             {[{ v: 'fast', l: 'Fast' }, { v: 'hd', l: 'HD' }].map(({ v, l }) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setQuality(v)}
-                disabled={status === 'loading'}
+              <button key={v} type="button" onClick={() => setQuality(v)} disabled={status === 'loading'}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
-                  ${quality === v
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white'
-                  }`}
-              >
-                {l}
-              </button>
+                  ${quality === v ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >{l}</button>
             ))}
           </div>
 
           {/* Send */}
-          <button
-            type="submit"
-            disabled={!prompt.trim() || status === 'loading'}
+          <button type="submit" disabled={!prompt.trim() || status === 'loading'}
             className="w-10 h-10 flex-shrink-0 rounded-xl
                        bg-gradient-to-br from-purple-500 to-purple-700
                        hover:from-purple-400 hover:to-purple-600
@@ -351,7 +399,8 @@ export default function VideoPage() {
         </form>
 
         <p className="text-center text-dark-300 text-xs mt-2">
-          Video generation takes 1–2 minutes · <kbd className="bg-dark-600 px-1 rounded">Enter</kbd> to start
+          Video generation takes 1–2 minutes ·{' '}
+          <kbd className="bg-dark-600 px-1 rounded">Enter</kbd> to start
         </p>
       </div>
     </div>

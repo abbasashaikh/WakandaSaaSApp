@@ -2,9 +2,7 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const path = require('path')
 
-// Keep a global reference to prevent garbage collection
 let mainWindow = null
-
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 function createWindow() {
@@ -15,7 +13,7 @@ function createWindow() {
     minHeight: 600,
     title: 'YourBrand App',
     backgroundColor: '#0a0a0f',
-    show: false, // Show only after ready-to-show
+    show: false,
     frame: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -26,21 +24,19 @@ function createWindow() {
     },
   })
 
-  // Load app
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
+    // DevTools HIDDEN for clean demo — uncomment to re-enable debugging:
+    // mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }
 
-  // Show window once fully loaded (prevents white flash)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
     mainWindow.focus()
   })
 
-  // Open external links in system browser, not in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -53,40 +49,19 @@ function createWindow() {
     }
   })
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
+  mainWindow.on('closed', () => { mainWindow = null })
 }
 
-// ─── IPC Handlers ────────────────────────────────────────────
-
-// Open external URL in system browser
-ipcMain.handle('open-external', async (_, url) => {
-  await shell.openExternal(url)
-})
-
-// Get app version
-ipcMain.handle('get-version', () => {
-  return app.getVersion()
-})
-
-// ─── App lifecycle ───────────────────────────────────────────
-
-app.whenReady().then(() => {
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// Security: prevent new window creation
-app.on('web-contents-created', (_, contents) => {
-  contents.on('new-window', (event) => {
-    event.preventDefault()
-  })
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+})
+
+ipcMain.on('open-external', (event, url) => {
+  shell.openExternal(url)
 })

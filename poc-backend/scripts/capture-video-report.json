@@ -1,0 +1,79 @@
+[
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations",
+    "requestBody": "{\"onramp\":[\"FLOW_UPGRADE_BANNER\",\"FLOW_UPGRADE_BUTTON\",\"FLOW_MANAGE_AI_CREDITS\",\"FLOW_VIDEO_TOOLTIP_UPSELL\",\"FLOW_MODEL_UPGRADE\",\"FLOW_MANAGE_MEMBERSHIP\"]}",
+    "ts": 1776360663533,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"recommendation\": [\n    {\n      \"onramp\": \"FLOW_UPGRADE_BANNER\",\n      \"upsellMessage\": \"Subscribe\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra&ms=pt:1056;s:957;vp:9\",\n      \"description\": \"You need more AI credits to complete this request. You can wait until your monthly credit resets, or your admin can enroll you in AI Ultra Access.\",\n      \"imageUri\": \"https://www.gstatic.com/apps/signup/resources/gemini_spark_icon_20px.svg\"\n    },\n    {\n      \"onramp\": \"FLOW_UPGRADE_BUTTON\",\n      \"upsellMessage\": \"Add AI credits\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1057;s:958;vp:9\"\n    },\n    {\n      \"onramp\": \"FLOW_MANAGE_AI_CREDITS\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1057;s:954;vp:9\"\n    },\n    {\n      \"onramp\": \"FLOW_VIDEO_TOOLTIP_UPSELL\",\n      \"upsellMessage\": \"Upgrade\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra&ms=pt:1056;s:959;vp:9\",\n      \"description\": \"Available to AI Ultra Access subscribers only\"\n    },\n    {\n      \"onramp\": \"FLOW_MODEL_UPGRADE\",\n      \"upsellMessage\": \"Upgrade\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra&ms=pt:1056;s:956;vp:9\"\n    },\n    {\n      \"onramp\": \"FLOW_MANAGE_MEMBERSHIP\",\n      \"upsellMessage\": \"Manage subscription\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra&ms=pt:1070;s:955\"\n    }\n  ]\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:checkAppAvailability",
+    "requestBody": "{\"clientContext\":{\"tool\":\"PINHOLE\"}}",
+    "ts": 1776360663537,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"availabilityState\": \"AVAILABLE\"\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations",
+    "requestBody": "{\"onramp\":[\"WHISK_UPGRADE_BUTTON\",\"WHISK_MANAGE_AI_CREDITS\",\"WHISK_CREDIT_QUOTA_UPGRADE\",\"WHISK_ANIMATE_TOAST\"]}",
+    "ts": 1776360668554,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"recommendation\": [\n    {\n      \"onramp\": \"WHISK_UPGRADE_BUTTON\",\n      \"upsellMessage\": \"Add AI credits\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1061;s:966;vp:9\"\n    },\n    {\n      \"onramp\": \"WHISK_MANAGE_AI_CREDITS\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1061;s:965;vp:9\"\n    },\n    {\n      \"onramp\": \"WHISK_CREDIT_QUOTA_UPGRADE\",\n      \"upsellMessage\": \"Manage subscription\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra&ms=pt:1073;s:964\",\n      \"description\": \"Your monthly quota will automatically refresh at the end of the month.\"\n    },\n    {\n      \"onramp\": \"WHISK_ANIMATE_TOAST\",\n      \"upsellMessage\": \"Add AI credits\",\n      \"recommendationUri\": \"https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1061;s:967;vp:9\",\n      \"description\": \"Add AI credits for higher Animate limits\"\n    }\n  ]\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:checkAppAvailability",
+    "requestBody": "{\"clientContext\":{\"tool\":\"PINHOLE\"}}",
+    "ts": 1776360672579,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"availabilityState\": \"AVAILABLE\"\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:checkAppAvailability",
+    "requestBody": "{\"clientContext\":{\"tool\":\"PINHOLE\"}}",
+    "ts": 1776360737626,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"availabilityState\": \"AVAILABLE\"\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations",
+    "requestBody": "{\"onramp\":[\"FLOW_UPGRADE_BANNER\",\"FLOW_UPGRADE_BUTTON\",\"FLOW_MANAGE_AI_CREDITS\",\"FLOW_VIDEO_TOOLTIP_UPSELL\",\"FLOW_MODEL_UPGRADE\",\"FLOW_MANAGE_MEMBERSHIP\"]}",
+    "ts": 1776360740191,
+    "responseStatus": 200,
+    "responseBody": "{}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations",
+    "requestBody": "{\"onramp\":[\"FLOW_UPGRADE_BANNER\",\"FLOW_UPGRADE_BUTTON\",\"FLOW_MANAGE_AI_CREDITS\",\"FLOW_VIDEO_TOOLTIP_UPSELL\",\"FLOW_MODEL_UPGRADE\",\"FLOW_MANAGE_MEMBERSHIP\"]}",
+    "ts": 1776360746028,
+    "responseStatus": 200,
+    "responseBody": "{}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations",
+    "requestBody": "{\"onramp\":[\"FLOW_UPGRADE_BANNER\",\"FLOW_UPGRADE_BUTTON\",\"FLOW_MANAGE_AI_CREDITS\",\"FLOW_VIDEO_TOOLTIP_UPSELL\",\"FLOW_MODEL_UPGRADE\",\"FLOW_MANAGE_MEMBERSHIP\"]}",
+    "ts": 1776360746280,
+    "responseStatus": 200,
+    "responseBody": "{}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText",
+    "requestBody": "{\"mediaGenerationContext\":{\"batchId\":\"d7d957cf-13fe-47f0-8a9f-9c50e43ecbf8\"},\"clientContext\":{\"projectId\":\"0d9e0298-c3bd-4141-94fa-d24e5ced8bd5\",\"tool\":\"PINHOLE\",\"userPaygateTier\":\"PAYGATE_TIER_NOT_PAID\",\"sessionId\":\";1776360935140\",\"recaptchaContext\":{\"token\":\"0cAFcWeA655UJsuFV1BVad8a89ZfwpsxNAmrT3eKv-_SFzzxA7TD5fwxy991qejncEk21ndu7zdXRnJrxk4jIvRLhlE0kHRRyxqYJT2aDQrQ-ZYPaAryzTa1aafOE-Q3oAAr4qJGjsZIY0VWK6gRuJ-yD0D7TUvNY0SL0PvkXOPqgaGtE0s5uJpYXSu8CuLqpv8vg0wuJ1ZLRIxah2DByfvzx8n2tCrPrfd3rTcsiTh9wQsHlAKUHHSj8tpvph-ilC83job1WnzUijkN8Tlwbx3S9v7oGoioFe6RH_AmYlqIcozE7V6DEnZ5iizhBDHu5ywYcU-PrOt6efiYiS9GuxcEv3i4sSPejeGwjn37guZkr_Th9RTdGOQp3Ma1kg-9UfmGSxBiQ7e0Aq0NGvj8oI02fdGuID9Y6pbRh12nQYpnop7wZBl4YmNiA_H7j7CL4YSRKlSVrMEuccGEKirqtUK73u-xHrNLr05X0RjdtpUCxR_4RtHRSnLbLcZnDGEIGnMgVyrGPojKs3fqeP24e8EncayktScaa-gWe0hYu6SXlP0eQzH-Mw-sHuclc0dcVugchEqRvcv0nqEjkSaElWAVbtP05G2p_PZ7bV_hg9lO_uCpoYZxKXXnFrvxzjKHF4SUq__t8RiiO8xtUv0XULb084I4IRAHTrV_m1dNiFK3uvksrfgB2XfTRSl1k2UXj12bNOh83Teb5cFHQ_lEjJS5IcSqekUwkDfe52r5jdNNMeGBlzGYbi3BB45BwnVzISzA7minYGjKDVuwSp7nr9AUJZxoDBch-uoCpBtek4HxctrpbKPZBbeLjjsnlrL0Ma4mzj3VqxV2YIe1KC3J2RzoP_LIHBU37qrgPw_J5bFzVThVA9xbRSj6bG_6PTtLD6cIZXhfMjsgMKcY22uZFIMA4JvQfObXW0x09wKayLqx8KX7fdWBQ2e5LW2-_0yIvhYYxz3kxN-5sfav95-E6dczAZI9uL3TyYUcSS7szuOcOkNfFuTaO_2vGyytYHN0UPNvawLomeTTj7XfQfdW66ISXheKG2cSnzVltOWDM6LZf3ovMVueXp6D8-3XTkrB7rJ9PkJFU1D5A3oB7OHpeVuMSUmoI-DJEkU4nSlO-eHgSxxJsnEQCjqH8Ko5P_7-uPopYd7S0Cvhd0uo7_3A58stTyyTDjIEZNmEeF9ddvKP0Mnfq3iWv_Rbqd52RaSIk6USk-oGnxuumL4vxyYKtRjPSGtz5FwqNlzZEw04lse9k7qLw3LbBa3tMfaw_Elx16VlMJ7UHhGlMimOrkIMUyeG3H9m3EtNeozFN8hoX6c13sG49jXh6VEEYxkD-s6MCs6nROFDEYf0YAT_h4vDN-g6559PsNXae4iFTu-zWX30HiLHbKT0zSx_avejBzswl-ow6PqokysoxRJBb5mb5H9jyBqK8HFp1SyqTCTLdJy80Sw99FQ4NqGoIv9vHKIFS6Y21b1cj7oGoTyFGU5_RnseELC8rPvknxm2LXwyHuMf0lnJueKbRX-goE4ydRz9vfYpam9CaheXNusfjDAdAA3mMsS6W_6XBLaO3w6UYhVstj1F8w58ukoAYUpYCKPQo4bRQFZOI3-63l8oe50bB_hbv-isdkTiO_YejYm5Qj6D9tM52wW5MrdKpecn_zIsSwQ8rw6fYIi6wHWUQOC9sO16wWLHvNZX-RxBIZDDxGsdhvuVRyxHuPukzmMw6h2vMbdUT6eKdbp7TF7TfIbt1e0QOvOncse5OW1kVKtKVsx4zau3ahQeMx3QBbSFXBRVE-jPoMtiF2l3KNU_tlQl7kKbxvgRuoMVlfzTahCkW-WSswlVbMk6HDt2vTWdzrvVbOk9v9UK3g5Mqpf3gdVCABcmvqNF7EwyHEGgzeXcDrnGLZIMQ9_dDel1scRfGU3Bc-R-gkNK3hRvnjUhHEovXEYyycyN5mQz5CxqN-e1QzY8FfxTzm7fYQA4YLvKxlY_y6NcLTwEZ9-UcMl051ScUVM4dTibhlkzgbrnLDQvYR6h1Hx94K6F_VKe9mS0JkwZQSwwvdpD08eVm6Zf9ZonsR6J4Kf4moAFAlTRRYuDhVv1DS9yXbr-UqYZ0VdOxDaWjqTTmwWER6fksR\",\"applicationType\":\"RECAPTCHA_APPLICATION_TYPE_WEB\"}},\"requests\":[{\"aspectRatio\":\"VIDEO_ASPECT_RATIO_LANDSCAPE\",\"seed\":16472,\"textInput\":{\"structuredPrompt\":{\"parts\":[{\"text\":\"a rolling ball\"}]}},\"videoModelKey\":\"veo_3_1_t2v_fast\",\"metadata\":{}}],\"useV2ModelConfig\":true}",
+    "ts": 1776360828896,
+    "responseStatus": 200,
+    "responseBody": "{\n  \"operations\": [\n    {\n      \"operation\": {\n        \"name\": \"6f57cf07-457e-4203-aa4b-32f84103eed8\"\n      },\n      \"sceneId\": \"\",\n      \"status\": \"MEDIA_GENERATION_STATUS_PENDING\"\n    }\n  ],\n  \"remainingCredits\": 30,\n  \"workflows\": [\n    {\n      \"name\": \"a15c3a5d-4ef0-4dd0-a7a8-ab80e6baedd5\",\n      \"metadata\": {\n        \"displayName\": \"a rolling ball\",\n        \"createTime\": \"2026-04-16T17:33:52.053527Z\",\n        \"primaryMediaId\": \"6f57cf07-457e-4203-aa4b-32f84103eed8\",\n        \"batchId\": \"d5e59471-385e-4f32-a053-9b5f81c834be\",\n        \"updateTime\": \"2026-04-16T17:33:53.760486Z\"\n      },\n      \"projectId\": \"0d9e0298-c3bd-4141-94fa-d24e5ced8bd5\"\n    }\n  ],\n  \"media\": [\n    {\n      \"name\": \"6f57cf07-457e-4203-aa4b-32f84103eed8\",\n      \"projectId\": \"0d9e0298-c3bd-4141-94fa-d24e5ced8bd5\",\n      \"workflowId\": \"a15c3a5d-4ef0-4dd0-a7a8-ab80e6baedd5\",\n      \"workflowStepId\": \"CAE\",\n      \"mediaMetadata\": {\n        \"createTime\": \"2026-04-16T17:33:52.053527Z\",\n        \"mediaTitle\": \"a rolling ball\",\n        \"requestData\": {\n          \"videoGenerationRequestData\": {\n            \"videoModelControlInput\": {\n              \"videoModelName\": \"veo_3_1_t2v_fast\",\n              \"videoGenerationMode\": \"VIDEO_GENERATION_MODE_TEXT_TO_VIDEO\",\n              \"videoAspectRatio\": \"VIDEO_ASPECT_RATIO_LANDSCAPE\"\n            }\n          },\n          \"promptInputs\": [\n            {\n              \"structuredPrompt\": {\n                \"parts\": [\n                  {\n                    \"text\": \"a rolling ball\"\n                  }\n                ]\n              }\n            }\n          ],\n          \"clientPlatform\": \"CLIENT_PLATFORM_WEB\"\n        },\n        \"mediaStatus\": {\n          \"mediaGenerationStatus\": \"MEDIA_GENERATION_STATUS_PENDING\"\n        },\n        \"visibility\": \"PRIVATE\"\n      },\n      \"video\": {\n        \"generatedVideo\": {\n          \"seed\": 16472,\n          \"prompt\": \"a rolling ball\",\n          \"model\": \"veo_3_1_t2v_fast\",\n          \"baseImageMediaGenerationId\": \"\",\n          \"isLooped\": false,\n          \"aspectRatio\": \"VIDEO_ASPECT_RATIO_LANDSCAPE\"\n        }\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1:batchLog",
+    "requestBody": "{\"appEvents\":[{\"event\":\"MEDIA_GENERATION\",\"eventProperties\":[{\"key\":\"MEDIA_GENERATION_TYPE\",\"stringValue\":\"video\"},{\"key\":\"MEDIA_GENERATION_SETTINGS\",\"stringValue\":\"{\\\"modelKey\\\":\\\"veo_3_1_t2v_fast\\\",\\\"apiPathname\\\":\\\"batchAsyncGenerateVideoText\\\",\\\"aspectRatio\\\":\\\"LANDSCAPE\\\",\\\"outputsPerPrompt\\\":1,\\\"structuredPrompt\\\":{\\\"parts\\\":[{\\\"text\\\":\\\"a rolling ball\\\"}]},\\\"referenceImages\\\":[],\\\"shouldReturnSilentVideos\\\":false}\"},{\"key\":\"MEDIA_GENERATION_PAYGATE_TIER\",\"stringValue\":\"PAYGATE_TIER_NOT_PAID\"},{\"key\":\"MEDIA_GENERATION_PAYGATE_TIER\",\"stringValue\":\"PAYGATE_TIER_NOT_PAID\"},{\"key\":\"USER_AGENT\",\"stringValue\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\"},{\"key\":\"IS_DESKTOP\",\"booleanValue\":true}],\"eventMetadata\":{\"sessionId\":\";1776360935140\"},\"eventTime\":\"2026-04-16T17:33:52.846Z\"}]}",
+    "ts": 1776360832853,
+    "responseStatus": 200,
+    "responseBody": "{}\n"
+  },
+  {
+    "url": "https://aisandbox-pa.googleapis.com/v1/flow:batchLogFrontendEvents",
+    "requestBody": "{\"events\":[{\"eventType\":\"MEDIA_GENERATION\",\"metadata\":{\"sessionId\":\";1776360935140\",\"createTime\":\"2026-04-16T17:33:52.847Z\",\"additionalParams\":{\"MEDIA_GENERATION_TYPE\":{\"@type\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"video\"},\"MEDIA_GENERATION_SETTINGS\":{\"@type\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"{\\\"modelKey\\\":\\\"veo_3_1_t2v_fast\\\",\\\"apiPathname\\\":\\\"batchAsyncGenerateVideoText\\\",\\\"aspectRatio\\\":\\\"LANDSCAPE\\\",\\\"outputsPerPrompt\\\":1,\\\"structuredPrompt\\\":{\\\"parts\\\":[{\\\"text\\\":\\\"a rolling ball\\\"}]},\\\"referenceImages\\\":[],\\\"shouldReturnSilentVideos\\\":false}\"},\"MEDIA_GENERATION_PAYGATE_TIER\":{\"@type\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"PAYGATE_TIER_NOT_PAID\"},\"USER_AGENT\":{\"@type\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\"},\"IS_DESKTOP\":{\"@type\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"true\"}}}}]}",
+    "ts": 1776360832864,
+    "responseStatus": 200,
+    "responseBody": "{}\n"
+  }
+]
