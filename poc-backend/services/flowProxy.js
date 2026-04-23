@@ -16,13 +16,21 @@ const SELF = `http://localhost:${PORT}`;
 const MOCK_IMAGES = [1,2,3,4,5].map(n => `${SELF}/mock-assets/mock-images/image${n}.jpg`);
 const MOCK_VIDEOS = [1,2,3].map(n => `${SELF}/mock-assets/mock-videos/video${n}.mp4`);
 
-let browser         = null;
-let bContext        = null;
-let ready           = false;
-let cachedProjectId = null;   // reuse same project
-let warmPage        = null;   // persistent warm page on labs.google
-let lastGenTime     = 0;      // timestamp of last generation (rate limiter)
-const MIN_GAP_MS    = 5000;   // minimum 5s between generations
+// ── Phase 3: Browser pool ────────────────────────────────────────────────────
+// Each generation job gets its own isolated Playwright context from the pool.
+// bContext is ONLY used for the warmPage keepalive — never for generation.
+const browserPool = require('./browserPool');
+
+// Per-user rate limiting (Phase 1)
+const userLastGenTime = new Map();
+const MIN_GAP_MS = parseInt(process.env.MIN_GEN_GAP_MS || '5000');
+
+// browser   = shared Chrome process (launched once)
+// bContext  = keepalive context for warmPage ONLY (never used for generation)
+// pool      = N isolated contexts, one per concurrent job
+let browser     = null;
+let bContext    = null;
+let warmPage    = null;
 
 // ── Mock ──────────────────────────────────────────────────────
 async function mockImage(prompt) {
@@ -55,7 +63,14 @@ async function dismissPopups(page) {
   // CRITICAL: NEVER remove DOM nodes — breaks React vDOM and loses the input
   // ONLY use: click real close buttons OR press Escape
   try {
-    const clicked = await page.evaluate(() => {
+    // Guard: skip evaluate if page is navigating (prevents Execution context destroyed error)
+    const currentUrl = page.url();
+    if (currentUrl.includes('accounts.google.com')) {
+      throw new Error('Session cookie expired — run: node scripts/captureSession.js then restart npm start');
+    }
+    let clicked;
+    try {
+      clicked = await page.evaluate(() => {
       // Find and click ANY visible close/dismiss button inside dialogs or modals
       const closeSelectors = [
         '[role="dialog"] button[aria-label*="close" i]',
@@ -80,6 +95,13 @@ async function dismissPopups(page) {
       return null;
     });
 
+    } catch(evalErr) {
+      if (evalErr.message && evalErr.message.includes('Execution context was destroyed')) {
+        console.warn('[FlowProxy:BROWSER] dismissPopups: context destroyed (non-fatal, skipping)');
+        return; // non-fatal — generation can still proceed
+      }
+      throw evalErr;
+    }
     if (clicked) {
       console.log(`[FlowProxy:BROWSER] Dismissed dialog via button: ${clicked}`);
       await page.waitForTimeout(800);
@@ -101,10 +123,13 @@ async function dismissPopups(page) {
   } catch(e) {}
 }
 
+// Track init state
+let _initDone = false;
+
 async function browserInit() {
-  if (ready && bContext) { console.log('[FlowProxy:BROWSER] Already ready'); return; }
+  if (_initDone) return;
   if (!FLOW_SESSION_COOKIE || FLOW_SESSION_COOKIE.length < 100) {
-    throw new Error('FLOW_SESSION_COOKIE not set. Run: npm run capture');
+    throw new Error('FLOW_SESSION_COOKIE not set. Run: npm run capture:session');
   }
   console.log('[FlowProxy:BROWSER] Starting browser...');
   const { chromium } = require('playwright');
@@ -138,13 +163,11 @@ try {
       '--window-size=1280,800',
       '--window-position=100,100',
       '--no-first-run',
-      // DO NOT add --disable-blink-features=AutomationControlled here
-      // stealth plugin handles it correctly — adding it twice breaks stealth
     ],
     ignoreDefaultArgs: ['--enable-automation'],
   });
   bContext = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
+    viewport:  { width: 1280, height: 800 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   });
   await bContext.addCookies([
@@ -157,30 +180,43 @@ try {
   await vp.goto('https://labs.google/fx/api/auth/session', { waitUntil: 'domcontentloaded', timeout: 20000 });
   const txt = await vp.evaluate(() => document.body.innerText).catch(() => '{}');
   await vp.close();
+
   let sess = {};
   try { sess = JSON.parse(txt); } catch {}
   if (!sess?.user?.email) {
-    await browser.close(); browser = null; bContext = null;
     throw new Error(`Cookie rejected. Run: npm run capture\nResponse: ${txt.slice(0,100)}`);
   }
   console.log(`[FlowProxy:BROWSER] ✅ Session: ${sess.user.email}`);
-  ready = true;
-  console.log('[FlowProxy:BROWSER] ✅ Ready');
+  // Phase 3: Share the launched browser with the pool
+  await browserPool.initPool(browser);
 
-  // Warm page: stays on labs.google between generations
-  // Keeps reCAPTCHA score high by simulating idle browsing
-  warmPage = await bContext.newPage();
-  await warmPage.goto('https://labs.google/fx/tools/flow', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await warmPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-  console.log('[FlowProxy:BROWSER] ✅ Warm page initialized on labs.google');
+  _initDone = true;
+  console.log(`[FlowProxy:BROWSER] ✅ Ready — session: ${sess?.user?.email || 'unknown'}`);
+
+  // Warm page: separate context just for session keepalive
+  // Does NOT participate in generation — just keeps cookies fresh
+  try {
+    warmPage = await bContext.newPage();
+    await warmPage.goto('https://labs.google/fx/tools/flow', {
+      waitUntil: 'domcontentloaded', timeout: 30000
+    });
+    await warmPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    console.log('[FlowProxy:BROWSER] ✅ Warm page initialized on labs.google');
+  } catch (err) {
+    console.warn('[FlowProxy:BROWSER] Warm page init failed (non-fatal):', err.message);
+  }
 }
 
 // ── createProject helper ──────────────────────────────────────
-async function createProject(page) {
-  // Reuse cached project if available — reduces API calls, lowers reCAPTCHA risk
-  if (cachedProjectId) {
-    console.log(`[FlowProxy:BROWSER] Reusing cached project: ${cachedProjectId}`);
-    return cachedProjectId;
+async function createProject(page, userId = null) {
+  // Per-user project cache via DB (replaces shared module-level cachedProjectId)
+  if (userId) {
+    const { getUserProject } = require('../db');
+    const cached = getUserProject(userId);
+    if (cached) {
+      console.log(`[FlowProxy:BROWSER] Reusing project for user ${userId}: ${cached}`);
+      return cached;
+    }
   }
   console.log('[FlowProxy:BROWSER] Navigating to gallery...');
   await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -190,65 +226,97 @@ async function createProject(page) {
   console.log(`[FlowProxy:BROWSER] Gallery URL: ${url}`);
   if (url.includes('accounts.google.com')) {
     // Session expired — auto-reinit browser with fresh cookies
-    console.log('[FlowProxy:BROWSER] Session expired, attempting auto-reinit...');
-    ready = false;
-    try {
-      await browserInit();
-      // Retry navigation after reinit
-      await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await sleep(2000);
-      const retryUrl = page.url();
-      if (retryUrl.includes('accounts.google.com')) {
-        throw new Error('Session expired — run: npm run capture to refresh cookie');
-      }
-      console.log('[FlowProxy:BROWSER] Auto-reinit succeeded');
-    } catch(e) {
-      throw new Error('Session expired — run: npm run capture to refresh cookie');
-    }
+    // Cookie in .env is expired — auto-reinit cannot fix this because it reuses
+    // the same expired cookie from process.env. User must run captureSession.js.
+    console.error('[FlowProxy:BROWSER] ❌ Session cookie expired in .env');
+    console.error('[FlowProxy:BROWSER] Run: node scripts/captureSession.js');
+    _initDone = false; // reset so next startup re-initialises after cookie is refreshed
+    throw new Error('Session cookie expired — run: node scripts/captureSession.js then restart npm start');
   }
   if (url.includes('/project/')) {
     await page.goto(FLOW_URL, { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {});
     await sleep(1500);
   }
-  const result = await page.evaluate(async () => {
-    try {
-      const r = await fetch('https://labs.google/fx/api/trpc/project.createProject', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ json: { projectTitle: new Date().toLocaleString(), toolName: 'PINHOLE' } }),
+  // Guard: re-check URL just before evaluate — SPA may have navigated internally
+  const urlBeforeEval = page.url();
+  if (urlBeforeEval.includes('accounts.google.com')) {
+    _initDone = false;
+    throw new Error('Session cookie expired — run: node scripts/captureSession.js then restart npm start');
+  }
+
+  let result;
+  try {
+    result = await page.evaluate(async () => {
+      try {
+        const r = await fetch('https://labs.google/fx/api/trpc/project.createProject', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ json: { projectTitle: new Date().toLocaleString(), toolName: 'PINHOLE' } }),
+        });
+        const d = await r.json();
+        return { status: r.status, projectId: d?.result?.data?.json?.result?.projectId, raw: JSON.stringify(d).slice(0,200) };
+      } catch(e) { return { status: 0, error: e.message }; }
+    });
+  } catch(evalErr) {
+    if (evalErr.message && evalErr.message.includes('Execution context was destroyed')) {
+      console.warn('[FlowProxy:BROWSER] createProject: context destroyed — waiting and retrying navigate...');
+      await sleep(3000);
+      await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      await sleep(2000);
+      result = await page.evaluate(async () => {
+        try {
+          const r = await fetch('https://labs.google/fx/api/trpc/project.createProject', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ json: { projectTitle: new Date().toLocaleString(), toolName: 'PINHOLE' } }),
+          });
+          const d = await r.json();
+          return { status: r.status, projectId: d?.result?.data?.json?.result?.projectId, raw: JSON.stringify(d).slice(0,200) };
+        } catch(e) { return { status: 0, error: e.message }; }
       });
-      const d = await r.json();
-      return { status: r.status, projectId: d?.result?.data?.json?.result?.projectId, raw: JSON.stringify(d).slice(0,200) };
-    } catch(e) { return { status: 0, error: e.message }; }
-  });
+    } else {
+      throw evalErr;
+    }
+  }
   if (result.error) throw new Error(`createProject fetch error: ${result.error}`);
   if (result.status !== 200 || !result.projectId) throw new Error(`project.createProject failed (${result.status}): ${result.raw}`);
   console.log(`[FlowProxy:BROWSER] Project: ${result.projectId}`);
-  cachedProjectId = result.projectId; // cache for reuse
+  // Store in DB per-user cache (safe for concurrent users)
+  if (userId) {
+    const { setUserProject } = require('../db');
+    setUserProject(userId, result.projectId);
+  }
   return result.projectId;
 }
 
 // ── IMAGE generation (intercept approach — proven working) ────
 async function browserGenerateImage(prompt, options = {}) {
-  if (!ready) await browserInit();
+  if (!_initDone) await browserInit();
   console.log(`[FlowProxy:BROWSER] Generating: "${prompt}"`);
-  // Rate limiter — minimum 5s between generations
-  const now = Date.now();
-  const gap = now - lastGenTime;
-  if (gap < MIN_GAP_MS) {
-    const wait = MIN_GAP_MS - gap;
-    console.log(`[FlowProxy:BROWSER] Rate limiter: waiting ${wait}ms`);
+  // Per-user rate limiter (each user has independent timing, not shared global)
+  const imgUserId = options?.userId || null;
+  const imgNow    = Date.now();
+  const imgLast   = imgUserId ? (userLastGenTime.get(`img_${imgUserId}`) || 0) : 0;
+  const imgGap    = imgNow - imgLast;
+  if (imgGap < MIN_GAP_MS) {
+    const wait = MIN_GAP_MS - imgGap;
+    console.log(`[FlowProxy:BROWSER] User ${imgUserId} rate gap: waiting ${wait}ms`);
     await sleep(wait);
   }
-  lastGenTime = Date.now();
+  if (imgUserId) userLastGenTime.set(`img_${imgUserId}`, Date.now());
 
-  // Always use a FRESH page per generation — ensures clean reCAPTCHA token
-  // The warm page stays alive separately to keep the browser session warm
-  const genPage = await bContext.newPage();
-  const usingWarmPage = false;
+  // Phase 3: acquire isolated context from pool
+  const { context: imgCtx, slotId: imgSlot, release: imgRelease } =
+    await browserPool.acquire({
+      jobId:         options?.jobId  || `img-${Date.now()}`,
+      userId:        imgUserId,
+      sessionCookie: FLOW_SESSION_COOKIE,
+    });
+  console.log(`[FlowProxy:BROWSER] Pool slot ${imgSlot} acquired for image job`);
+  const genPage = await imgCtx.newPage();
   try {
-    const projectId = await createProject(genPage);
+    const projectId = await createProject(genPage, imgUserId);
 
     let resolveUrl, rejectUrl;
     const urlPromise = new Promise((res, rej) => { resolveUrl = res; rejectUrl = rej; });
@@ -266,33 +334,132 @@ async function browserGenerateImage(prompt, options = {}) {
       } catch(e) { rejectUrl(e); }
     });
 
-    const projectUrl = `${FLOW_URL}/project/${projectId}`;
-    console.log(`[FlowProxy:BROWSER] Loading project...`);
-    await genPage.goto(projectUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // ─────────────────────────────────────────────────────────────────────────
+    // Navigation: gallery warm-up → project page
+    //
+    // WHY GALLERY FIRST:
+    //   Fresh pool contexts have no DNS cache, no TLS session, no HTTP resource
+    //   cache. Navigating directly to /project/UUID cold can exceed 30s on first
+    //   load (DNS + TLS + full Next.js bundle download).
+    //   Loading FLOW_URL (gallery) first primes all caches. Then the project page
+    //   loads in ~3-5s using cached resources — well within any timeout.
+    //   BONUS: The gallery dwell time also starts building the reCAPTCHA score.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Step A: Gallery warm-up (DNS + TLS + CDN cache + reCAPTCHA Phase 1)
+    console.log('[FlowProxy:BROWSER] Gallery warm-up (priming cache)...');
+    await genPage.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-    await dismissPopups(genPage); // close changelog/update overlay
-    await sleep(2000);
 
-    // Human-like behavior: move mouse, slight scroll — helps reCAPTCHA scoring
-    await genPage.mouse.move(400 + Math.random()*200, 300 + Math.random()*100);
-    await sleep(300 + Math.random()*400);
-    await genPage.mouse.move(500 + Math.random()*100, 400 + Math.random()*80);
-    await sleep(200 + Math.random()*300);
-    await genPage.evaluate(() => window.scrollBy(0, 30 + Math.random()*20));
-    await sleep(1500 + Math.random()*1000);
-
-    // Final popup check just before trying to type — dialogs can appear after networkidle
+    // Verify session is still valid
+    const imgGalleryUrl = genPage.url();
+    if (imgGalleryUrl.includes('accounts.google.com')) {
+      _initDone = false;
+      throw new Error('Session cookie expired — run: node scripts/captureSession.js then restart');
+    }
+    console.log(`[FlowProxy:BROWSER] Gallery ready: ${imgGalleryUrl}`);
     await dismissPopups(genPage);
 
+    // ── reCAPTCHA warm-up (runs on gallery page) ─────────────────────────────
+    // Fresh contexts have zero reCAPTCHA score. We build it during gallery dwell
+    // BEFORE generating, so the project page navigation arrives with a warm score.
+    console.log('[FlowProxy:BROWSER] reCAPTCHA warm-up...');
+
+    // Phase 1: Dwell — reCAPTCHA observes the page load
+    await sleep(1200 + Math.random() * 600);
+
+    // Phase 2: Reading sweep — slow left-to-right mouse movement
+    const startX = 300 + Math.random() * 100;
+    const startY = 200 + Math.random() * 80;
+    await genPage.mouse.move(startX, startY);
+    await sleep(300 + Math.random() * 200);
+    for (let x = startX; x < startX + 350; x += 45 + Math.random() * 20) {
+      await genPage.mouse.move(x, startY + Math.random() * 8);
+      await sleep(55 + Math.random() * 55);
+    }
+    await sleep(200 + Math.random() * 200);
+
+    // Phase 3: Brief scroll (natural page exploration)
+    await genPage.evaluate(() => window.scrollBy(0, 50 + Math.random() * 30));
+    await sleep(400 + Math.random() * 200);
+
+    // Phase 4: Move toward bottom of viewport (user looking for the prompt)
+    await genPage.mouse.move(500 + Math.random() * 80, 600 + Math.random() * 60);
+    await sleep(250 + Math.random() * 150);
+    await genPage.evaluate(() => window.scrollBy(0, -(15 + Math.random() * 10)));
+    await sleep(500 + Math.random() * 300);
+
+    console.log('[FlowProxy:BROWSER] reCAPTCHA warm-up complete');
+
+    // Step B: Navigate to project page — uses cached resources, loads fast
+    const projectUrl = `${FLOW_URL}/project/${projectId}`;
+    console.log('[FlowProxy:BROWSER] Loading project...');
+    await genPage.goto(projectUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+    await dismissPopups(genPage);
+
+    // Give React time to hydrate and mount the prompt bar component.
+    // Even with warm resources, React needs ~2-3s after networkidle to render the
+    // contenteditable input. Without this sleep, waitForSelector times out.
+    await sleep(2500);
+    await dismissPopups(genPage); // second check — dialogs sometimes appear after hydration
+
+    // Wait for prompt input with generous timeout (React hydration can be slow)
     let inputEl = null, inputSel = '';
     for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
       try {
-        await genPage.waitForSelector(sel, { state: 'visible', timeout: 10000 });
+        await genPage.waitForSelector(sel, { state: 'visible', timeout: 20000 });
         const el = await genPage.$(sel);
         if (el && await el.isVisible().catch(() => false)) { inputEl = el; inputSel = sel; break; }
       } catch {}
     }
-    if (!inputEl) throw new Error('Prompt input not found');
+
+    // Fallback: if project page didn't render input, stale project — clear cache and use gallery
+    if (!inputEl) {
+      const btnCount = await genPage.evaluate(() =>
+        document.querySelectorAll('button, [role="button"]').length
+      ).catch(() => 0);
+      console.warn(`[FlowProxy:BROWSER] ⚠️ Project page blank (${btnCount} buttons) — navigating to gallery as fallback`);
+
+      // Clear stale project so next attempt creates a fresh one
+      if (imgUserId) {
+        try { const { clearUserProject } = require('../db'); clearUserProject(imgUserId); } catch {}
+      }
+
+      // Navigate BACK to gallery — waiting on a blank page never recovers.
+      // The gallery page reliably renders the prompt input for logged-in users.
+      console.log('[FlowProxy:BROWSER] Navigating to gallery...');
+      try {
+        await genPage.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await genPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        console.log(`[FlowProxy:BROWSER] Gallery URL: ${genPage.url()}`);
+        await dismissPopups(genPage);
+        await sleep(1500);
+      } catch(navErr) {
+        throw new Error(`Gallery fallback navigation failed: ${navErr.message}`);
+      }
+
+      // Create new project from gallery context (clears the stale one)
+      const newProjectId = await createProject(genPage, imgUserId);
+      console.log(`[FlowProxy:BROWSER] Project: ${newProjectId}`);
+
+      // Navigate to the new project page
+      const newProjectUrl = `${FLOW_URL}/project/${newProjectId}`;
+      await genPage.goto(newProjectUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+      await dismissPopups(genPage);
+      await sleep(2500);
+
+      // Try selectors on the fresh project page
+      for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
+        try {
+          await genPage.waitForSelector(sel, { state: 'visible', timeout: 20000 });
+          const el = await genPage.$(sel);
+          if (el && await el.isVisible().catch(() => false)) { inputEl = el; inputSel = sel; break; }
+        } catch {}
+      }
+      if (!inputEl) throw new Error('Prompt input not found even after gallery fallback — will retry');
+    }
     console.log(`[FlowProxy:BROWSER] Input: ${inputSel}`);
 
     await inputEl.click(); await sleep(400);
@@ -325,32 +492,43 @@ async function browserGenerateImage(prompt, options = {}) {
     const imageUrl = await Promise.race([urlPromise, sleep(120000).then(()=>{throw new Error('Timed out')})]);
     console.log(`[FlowProxy:BROWSER] ✅ Image: ${imageUrl}`);
     return { success:true, output_url:imageUrl, metadata:{projectId} };
-  } finally { if (!usingWarmPage) await genPage.close().catch(()=>{}); }
+  } finally {
+    await genPage.close().catch(() => {});
+    await imgRelease(); // return slot to pool
+    console.log(`[FlowProxy:BROWSER] Pool slot ${imgSlot} released`);
+  }
 }
-
 // ── VIDEO generation ──────────────────────────────────────────
 // Uses the SAME intercept approach as image generation.
 // Forces video mode by manipulating the URL hash/localStorage before typing.
 // Then intercepts batchGenerateVideos response — no direct API calls needed.
 async function browserGenerateVideo(prompt, options = {}) {
-  if (!ready) await browserInit();
+  if (!_initDone) await browserInit();
   console.log(`[FlowProxy:BROWSER] Generating VIDEO: "${prompt}"`);
-  // Rate limiter
-  const nowV = Date.now();
-  const gapV = nowV - lastGenTime;
-  if (gapV < MIN_GAP_MS) {
-    const wait = MIN_GAP_MS - gapV;
-    console.log(`[FlowProxy:BROWSER] Rate limiter: waiting ${wait}ms`);
+  // Per-user rate limiter for video
+  const vidUserId = options?.userId || null;
+  const vidNow    = Date.now();
+  const vidLast   = vidUserId ? (userLastGenTime.get(`vid_${vidUserId}`) || 0) : 0;
+  const vidGap    = vidNow - vidLast;
+  if (vidGap < MIN_GAP_MS) {
+    const wait = MIN_GAP_MS - vidGap;
+    console.log(`[FlowProxy:BROWSER] User ${vidUserId} rate gap: waiting ${wait}ms`);
     await sleep(wait);
   }
-  lastGenTime = Date.now();
+  if (vidUserId) userLastGenTime.set(`vid_${vidUserId}`, Date.now());
 
-  // Fresh page per generation — clean reCAPTCHA token each time
-  const genPage = await bContext.newPage();
-  const usingWarmPage = false;
+  // Phase 3: acquire isolated context from pool
+  const { context: vidCtx, slotId: vidSlot, release: vidRelease } =
+    await browserPool.acquire({
+      jobId:         options?.jobId  || `vid-${Date.now()}`,
+      userId:        vidUserId,
+      sessionCookie: FLOW_SESSION_COOKIE,
+    });
+  console.log(`[FlowProxy:BROWSER] Pool slot ${vidSlot} acquired for video job`);
+  const genPage = await vidCtx.newPage();
   try {
     // Step 1: Create/reuse project
-    const projectId = await createProject(genPage);
+    const projectId = await createProject(genPage, vidUserId);
 
     // Step 2: Intercept video API calls
     // PRIMARY: catch batchAsyncGenerateVideoText POST → get mediaId
@@ -358,7 +536,8 @@ async function browserGenerateVideo(prompt, options = {}) {
     let resolveMediaInfo, rejectMediaInfo;
     const mediaPromise = new Promise((res, rej) => { resolveMediaInfo = res; rejectMediaInfo = rej; });
 
-    let discoveredPollUrl = null; // Flow's own polling URL once detected
+    let discoveredPollUrl   = null; // Flow's own polling URL once detected
+    let generationTriggered = false; // set to true after Enter/send button pressed
 
     // Intercept Flow's own GET requests to discover the poll URL
     genPage.on('request', (request) => {
@@ -393,18 +572,47 @@ async function browserGenerateVideo(prompt, options = {}) {
       }
 
       if (method !== 'POST') return;
-      // The real video endpoint from capture analysis
-      if (!respUrl.includes('batchAsyncGenerateVideoText') &&
-          !respUrl.includes('batchGenerateVideos') &&
-          !respUrl.includes('generateVideos')) return;
+
+      // DEBUG: Log ALL POST requests to aisandbox so we can see which endpoint fires
+      if (respUrl.includes('aisandbox') || respUrl.includes('googleapis')) {
+        console.log(`[FlowProxy:BROWSER] POST intercepted: ${respUrl.split('/').slice(-2).join('/')} → ${response.status()}`);
+      }
+
+      // THE FIX: Only match real aisandbox video API endpoints.
+      // EXCLUDE Google Analytics collect URLs which contain "video" in query params
+      // but are NOT the generation API. GA URLs look like:
+      //   https://*.google-analytics.com/g/collect?...media_generation_type=video...
+      // Real video API:
+      //   https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText
+      //   https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus
+      //   https://<projectId>/flowMedia:batchGenerateVideos
+
+      // Step 1: Must be from aisandbox or labs.google API (not GA analytics)
+      const isRealApi = respUrl.includes('aisandbox-pa.googleapis.com') ||
+                        (respUrl.includes('labs.google') && !respUrl.includes('collect?'));
+      if (!isRealApi) return;
+
+      // Step 2: Must contain a video generation endpoint keyword in the URL PATH
+      //         (not just anywhere in query params)
+      const urlPath = respUrl.split('?')[0]; // strip query string
+      const isTriggerEndpoint = urlPath.includes('batchAsyncGenerateVideoText') ||
+                               urlPath.includes('batchGenerateVideos')        ||
+                               urlPath.includes('generateVideos')             ||
+                               urlPath.includes('AsyncGenerate');
+      const isStatusEndpoint  = urlPath.includes('batchCheckAsyncVideo')     ||
+                                urlPath.includes('batchCheckAsync');
+      const isVideoPath       = urlPath.includes('/video:') || urlPath.includes('/video/');
+      if (!isTriggerEndpoint && !isStatusEndpoint && !isVideoPath) return;
 
       try {
         const status = response.status();
         const body   = await response.json().catch(() => ({}));
         console.log(`[FlowProxy:BROWSER] Video API intercepted → ${status}`);
-        console.log(`[FlowProxy:BROWSER] Endpoint: ${respUrl.split('/').pop()}`);
+        console.log(`[FlowProxy:BROWSER] Endpoint: ${urlPath.split('/').pop()}`);
         console.log(`[FlowProxy:BROWSER] Body: ${JSON.stringify(body).slice(0,300)}`);
-        if (status !== 200) { rejectMediaInfo(new Error(`API ${status}: ${JSON.stringify(body).slice(0,200)}`)); return; }
+        // Only reject on server errors (5xx), not on 204 or other 2xx
+        if (status >= 400) { rejectMediaInfo(new Error(`API ${status}: ${JSON.stringify(body).slice(0,200)}`)); return; }
+        if (status !== 200) return; // 204/202/etc = ignore, keep waiting
 
         // Extract mediaId and projectId for polling
         const mediaId    = body?.operations?.[0]?.operation?.name ||
@@ -422,6 +630,20 @@ async function browserGenerateVideo(prompt, options = {}) {
           resolveMediaInfo({ type: 'direct', url: directUrl });
           return;
         }
+
+        // For the TRIGGER endpoint: always resolve (this is our generation starting)
+        // For batchCheckAsyncVideoGenerationStatus: only resolve AFTER Enter was pressed
+        // to avoid capturing stale status checks from previous sessions on page load
+        const isTriggerUrl = urlPath.includes('batchAsyncGenerateVideoText') ||
+                             urlPath.includes('batchGenerateVideos')         ||
+                             urlPath.includes('generateVideos');
+        const isStatusCheckUrl = urlPath.includes('batchCheckAsyncVideo');
+
+        if (isStatusCheckUrl && !generationTriggered) {
+          console.log(`[FlowProxy:BROWSER] Ignoring pre-trigger status check: ${urlPath.split('/').pop()}`);
+          return; // stale status from page load — ignore
+        }
+
         if (mediaId) {
           console.log(`[FlowProxy:BROWSER] Async job: mediaId=${mediaId} projectId=${projectId} workflowId=${workflowId}`);
           resolveMediaInfo({ type: 'async', mediaId, projectId, workflowId });
@@ -432,176 +654,277 @@ async function browserGenerateVideo(prompt, options = {}) {
       } catch(e) { rejectMediaInfo(e); }
     });
 
-    // Step 3: Navigate to project page
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 3: Navigate directly to project page
+    //
+    // IMPORTANT: No gallery warm-up for video.
+    // Reason: a fresh isolated pool context navigating to the gallery first
+    //         consistently times out (30s+) because it has no cached resources.
+    //         Image generation proves that going DIRECTLY to /project/UUID works
+    //         without any warm-up — the SPA routes fine from a cold context.
+    //
+    // The gallery root (/fx/tools/flow) shows a media GRID with no prompt bar.
+    // The project page (/project/UUID) always has the contenteditable input.
+    // ─────────────────────────────────────────────────────────────────────────
     const projectUrl = `${FLOW_URL}/project/${projectId}`;
-    console.log('[FlowProxy:BROWSER] Loading project page for video...');
-    await genPage.goto(projectUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    console.log(`[FlowProxy:BROWSER] Navigating to project page: ${projectId}`);
+    await genPage.goto(projectUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
-    await dismissPopups(genPage); // close any changelog/update overlay
+
+    // Session check
+    const vidProjUrl = genPage.url();
+    if (vidProjUrl.includes('accounts.google.com')) {
+      _initDone = false;
+      throw new Error('Session cookie expired — run: node scripts/captureSession.js then restart npm start');
+    }
+    console.log(`[FlowProxy:BROWSER] Project page loaded: ${vidProjUrl}`);
+
+    await dismissPopups(genPage);
     await sleep(2000);
 
-    // Step 4: Click the model pill → click "Video" tab → close popup
-    // From screenshot analysis:
-    // - The pill button shows "Nano Banana 2 □ x2" (current model name)
-    // - Clicking it opens a popup with "Image" | "Video" tabs at the top
-    // - Clicking "Video" tab switches to video mode
-    // - Bottom bar changes to "Video □ x2"
-    // - Then Enter fires batchGenerateVideos instead of batchGenerateImages
-
-    console.log('[FlowProxy:BROWSER] Opening model picker...');
-
-    // Step 4a: Find and click the model pill button
-    // It contains text like "Nano Banana 2" or "Video" (if already in video mode)
-    let pillClicked = false;
-    const pillSelectors = [
-      // Match the pill by its partial text content
-      'button:has-text("Nano Banana")',
-      'button:has-text("Nano")',
-      'button:has-text("Video □")',
-      'button:has-text("Image □")',
-      // The pill is the button to the left of the → arrow button
-      // Find it by position: rightmost button BEFORE the send arrow
-    ];
-
-    for (const sel of pillSelectors) {
+    // Step 3c: Wait for prompt input (project page always has this)
+    let promptBarReady = false;
+    for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
       try {
+        await genPage.waitForSelector(sel, { state: 'visible', timeout: 12000 });
+        console.log(`[FlowProxy:BROWSER] ✅ Prompt bar ready (${sel})`);
+        promptBarReady = true;
+        break;
+      } catch {}
+    }
+
+    // Step 3d: If project page blank, clear stale project and retry
+    if (!promptBarReady) {
+      const btnCount = await genPage.evaluate(() =>
+        document.querySelectorAll('button, [role="button"]').length
+      ).catch(() => 0);
+      console.warn(`[FlowProxy:BROWSER] ⚠️ Prompt bar not found (${btnCount} buttons) — clearing stale project`);
+
+      if (vidUserId) {
+        try { const { clearUserProject } = require('../db'); clearUserProject(vidUserId); } catch {}
+      }
+
+      // Retry: create a NEW project (stale cached ID was the cause)
+      const { clearUserProject } = require('../db');
+      if (vidUserId) clearUserProject(vidUserId);
+      const freshProjectId = await createProject(genPage, vidUserId);
+      const freshUrl = `${FLOW_URL}/project/${freshProjectId}`;
+      console.log(`[FlowProxy:BROWSER] Retrying with fresh project: ${freshProjectId}`);
+      await genPage.goto(freshUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await genPage.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+      await dismissPopups(genPage);
+      await sleep(2000);
+
+      for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
+        try {
+          await genPage.waitForSelector(sel, { state: 'visible', timeout: 12000 });
+          console.log(`[FlowProxy:BROWSER] ✅ Fresh project prompt bar ready (${sel})`);
+          promptBarReady = true;
+          break;
+        } catch {}
+      }
+
+      if (!promptBarReady) {
+        throw new Error('Prompt bar not found — run: node scripts/captureSession.js then restart npm start');
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 4: Switch to Video mode
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Step 4a: Dump toolbar buttons for diagnostics
+    const vidBtnsInfo = await genPage.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+      return btns.filter(b => { const r=b.getBoundingClientRect(); return r.width>0&&r.height>0; })
+        .map((b,i) => ({ i, text: (b.innerText||'').trim().slice(0,40), rect: { x:Math.round(b.getBoundingClientRect().x), y:Math.round(b.getBoundingClientRect().y), w:Math.round(b.getBoundingClientRect().width), h:Math.round(b.getBoundingClientRect().height) } }));
+    }).catch(() => []);
+    console.log(`[FlowProxy:BROWSER] Gallery buttons (${vidBtnsInfo.length}):`, JSON.stringify(vidBtnsInfo.slice(0, 20)));
+
+    // Step 4b: Detect current mode from pill (second-to-last toolbar button)
+    const vidModeDetect = await genPage.evaluate(() => {
+      const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
+      if (!input) return { mode: 'unknown', pillText: '', coords: null };
+      const inputRect = input.getBoundingClientRect();
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const toolbarBtns = allBtns
+        .filter(b => { const r=b.getBoundingClientRect(); return r.width>15&&r.height>15&&Math.abs((r.top+r.height/2)-(inputRect.top+inputRect.height/2))<80; })
+        .sort((a,b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      const pill = toolbarBtns.length >= 2 ? toolbarBtns[toolbarBtns.length-2] : toolbarBtns[0];
+      const pillText = (pill?.innerText||pill?.getAttribute('aria-label')||'').toLowerCase();
+      const pillRect = pill?.getBoundingClientRect();
+      let mode = 'unknown';
+      const fw = pillText.split('\n')[0].trim();
+      if (fw === 'video' || fw.includes('videocam') || fw.includes('video_cam')) mode='video';
+      else if (pillText.includes('crop_') || pillText.includes('panorama')) mode='image';
+      return { mode, pillText: pillText.slice(0,60), coords: pillRect ? {x:pillRect.x+pillRect.width/2, y:pillRect.y+pillRect.height/2} : null, toolbarCount: toolbarBtns.length };
+    }).catch(() => ({ mode:'unknown', pillText:'', coords:null }));
+
+    console.log(`[FlowProxy:BROWSER] Mode detect: mode="${vidModeDetect.mode}" pill="${vidModeDetect.pillText}" toolbar=${vidModeDetect.toolbarCount}`);
+
+    if (vidModeDetect.mode === 'video') {
+      console.log('[FlowProxy:BROWSER] ✅ Already in video mode on gallery');
+    } else {
+      console.log('[FlowProxy:BROWSER] Switching to video mode...');
+
+      // Step 4c: Click the pill using Playwright mouse (React-safe)
+      let pillClicked = false;
+
+      // Use coords from detection if available
+      if (vidModeDetect.coords) {
+        await genPage.mouse.click(vidModeDetect.coords.x, vidModeDetect.coords.y);
+        pillClicked = true;
+        console.log(`[FlowProxy:BROWSER] Pill clicked at (${Math.round(vidModeDetect.coords.x)}, ${Math.round(vidModeDetect.coords.y)})`);
+        await sleep(1200);
+      } else {
+        // Fallback: try named selectors
+        for (const sel of ['button:has-text("Nano")', 'button:has-text("Flow")', 'button:has-text("Imagen")', 'button:has-text("Gemini")', '[aria-label*="model" i]']) {
+          try {
+            const el = await genPage.$(sel);
+            if (el && await el.isVisible().catch(()=>false)) {
+              const box = await el.boundingBox().catch(()=>null);
+              if (box) { await genPage.mouse.click(box.x+box.width/2, box.y+box.height/2); }
+              else { await el.click({force:true}); }
+              pillClicked = true;
+              console.log(`[FlowProxy:BROWSER] Pill clicked via selector: ${sel}`);
+              await sleep(1200);
+              break;
+            }
+          } catch {}
+        }
+      }
+
+      if (!pillClicked) {
+        console.warn('[FlowProxy:BROWSER] ⚠️ Could not click pill');
+      }
+
+      // Step 4d: Click the "Video" tab — only non-sidebar, non-toolbar buttons
+      // CRITICAL: sidebar buttons are at x<=60 (left nav). Exclude them.
+      // Popup buttons appear above the toolbar (y < toolbar_y - 20).
+      await sleep(600);
+      const videoTabResult = await genPage.evaluate(() => {
+        const allBtns = Array.from(document.querySelectorAll('button, [role="button"], [role="tab"], [role="option"]'));
+        const candidates = allBtns.filter(b => {
+          const r = b.getBoundingClientRect();
+          const t = (b.innerText||b.getAttribute('aria-label')||b.textContent||'').toLowerCase().trim();
+          if (!t.includes('video')) return false;
+          if (r.x <= 60) return false;   // exclude sidebar (x≤60)
+          if (r.y > 680) return false;   // exclude toolbar area (y>680)
+          if (r.width < 10 || r.height < 10) return false;
+          return true;
+        });
+        console.log('[VideoTab] Non-sidebar candidates:', JSON.stringify(
+          candidates.map(b => ({
+            text: (b.innerText||b.textContent||'').trim().slice(0,40),
+            x: Math.round(b.getBoundingClientRect().x),
+            y: Math.round(b.getBoundingClientRect().y),
+          }))
+        ));
+        if (candidates.length > 0) {
+          const btn = candidates[0];
+          const r = btn.getBoundingClientRect();
+          return { clicked: true, x: r.x+r.width/2, y: r.y+r.height/2, text: (btn.innerText||btn.textContent||'').trim().slice(0,40) };
+        }
+        return { clicked: false };
+      }).catch(() => ({ clicked: false }));
+
+      if (videoTabResult.clicked && videoTabResult.x) {
+        await genPage.mouse.click(videoTabResult.x, videoTabResult.y);
+        console.log(`[FlowProxy:BROWSER] ✅ Video tab clicked: "${videoTabResult.text}" at (${Math.round(videoTabResult.x)},${Math.round(videoTabResult.y)})`);
+        await sleep(800);
+      } else {
+        console.warn('[FlowProxy:BROWSER] ⚠️ Video tab not found in popup');
+      }
+
+      // Step 4e: Select x1 (single output)
+      try {
+        await genPage.waitForSelector('button:has-text("x1")', { state:'visible', timeout:2500 });
+        const x1Btns = await genPage.$$('button:has-text("x1")');
+        for (const btn of x1Btns) {
+          if (await btn.isVisible().catch(()=>false)) {
+            const box = await btn.boundingBox().catch(()=>null);
+            if (box) await genPage.mouse.click(box.x+box.width/2, box.y+box.height/2);
+            else await btn.click({force:true});
+            console.log('[FlowProxy:BROWSER] ✅ x1 selected');
+            await sleep(400);
+            break;
+          }
+        }
+      } catch { console.log('[FlowProxy:BROWSER] x1 not found'); }
+
+      // Step 4f: Close popup
+      // Do NOT press Escape — it cancels mode selection in some React versions.
+      // Click the pill button again to toggle the popup closed (confirms selection).
+      // Then wait for React state to fully commit the mode change.
+      try {
+        // Click the pill coords again to close popup (pill is a toggle)
+        if (vidModeDetect.coords) {
+          await genPage.mouse.click(vidModeDetect.coords.x, vidModeDetect.coords.y);
+          await sleep(600);
+        } else {
+          // Fallback: click empty canvas area well away from all controls
+          await genPage.mouse.click(640, 400);
+          await sleep(600);
+        }
+      } catch {}
+
+      // Give React 2 seconds to commit the mode state change
+      await sleep(2000);
+    }
+
+    // Step 4g: Confirm mode via pill
+    const vidModeConfirm = await genPage.evaluate(() => {
+      const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
+      if (!input) return { videoActive:false, pillText:'no input' };
+      const inputRect = input.getBoundingClientRect();
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const toolbarBtns = allBtns
+        .filter(b=>{const r=b.getBoundingClientRect();return r.width>15&&r.height>15&&Math.abs((r.top+r.height/2)-(inputRect.top+inputRect.height/2))<80;})
+        .sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
+      const pill = toolbarBtns.length>=2 ? toolbarBtns[toolbarBtns.length-2] : toolbarBtns[0];
+      const pillText = (pill?.innerText||'').toLowerCase();
+      const firstPillWord = pillText.split('\n')[0].trim();
+      const videoActive = firstPillWord === 'video' || firstPillWord.includes('videocam') || firstPillWord.includes('video_cam');
+      return { videoActive, pillText: pillText.slice(0, 60), firstWord: firstPillWord };
+    }).catch(()=>({videoActive:false, pillText:'eval error'}));
+
+    console.log(`[FlowProxy:BROWSER] Mode confirm: videoActive=${vidModeConfirm.videoActive} pill="${vidModeConfirm.pillText}"`);
+
+        // ─────────────────────────────────────────────────────────────────────────
+    // Step 5: Type the prompt
+    // ─────────────────────────────────────────────────────────────────────────
+    await sleep(800);
+
+    // Wait for input to be available (React may still be updating after mode switch)
+    let inputEl = null;
+    const inputSelectors = ['[contenteditable="true"]', 'textarea', '[role="textbox"]'];
+
+    for (const sel of inputSelectors) {
+      try {
+        await genPage.waitForSelector(sel, { state: 'visible', timeout: 8000 });
         const el = await genPage.$(sel);
         if (el && await el.isVisible().catch(() => false)) {
           await el.click();
-          pillClicked = true;
-          console.log(`[FlowProxy:BROWSER] Model pill clicked: ${sel}`);
-          await sleep(800);
-          break;
-        }
-      } catch {}
-    }
-
-    if (!pillClicked) {
-      // Fallback: find by position — pill is second-to-last element in the prompt bar
-      pillClicked = await genPage.evaluate(() => {
-        const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
-        if (!input) return false;
-        const inputRect = input.getBoundingClientRect();
-        // Find all buttons to the RIGHT of the input and above the bottom of screen
-        const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
-        const rightBtns = allBtns.filter(b => {
-          const r = b.getBoundingClientRect();
-          return r.left > inputRect.right && r.width > 20 && r.height > 10 && r.top > 0;
-        }).sort((a,b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        
-        console.log('[Pill] Buttons to right of input:', rightBtns.map(b => ({
-          text: b.innerText?.trim().slice(0,30),
-          x: Math.round(b.getBoundingClientRect().left)
-        })));
-        
-        // The pill is the FIRST button to the right of input (not the send arrow)
-        if (rightBtns.length >= 1) {
-          rightBtns[0].click();
-          return true;
-        }
-        return false;
-      });
-      if (pillClicked) {
-        console.log('[FlowProxy:BROWSER] Model pill clicked by position');
-        await sleep(800);
-      }
-    }
-
-    if (!pillClicked) {
-      console.log('[FlowProxy:BROWSER] ⚠️ Model pill not found');
-    }
-
-    // Step 4b: Click the "Video" tab in the popup
-    let videoTabClicked = false;
-    const videoTabSelectors = [
-      'button:has-text("Video")',
-      '[role="tab"]:has-text("Video")',
-    ];
-
-    for (const sel of videoTabSelectors) {
-      try {
-        // Wait briefly for popup to appear
-        await genPage.waitForSelector(sel, { state: 'visible', timeout: 3000 });
-        const els = await genPage.$$(sel);
-        for (const el of els) {
-          if (await el.isVisible().catch(() => false)) {
-            const text = await el.innerText().catch(() => '');
-            // Make sure it's exactly "Video" not something containing "Video"
-            if (text.trim() === 'Video' || text.includes('Video')) {
-              await el.click();
-              videoTabClicked = true;
-              console.log('[FlowProxy:BROWSER] ✅ "Video" tab clicked');
-              await sleep(600);
-              break;
-            }
-          }
-        }
-        if (videoTabClicked) break;
-      } catch {}
-    }
-
-    if (!videoTabClicked) {
-      console.log('[FlowProxy:BROWSER] ⚠️ "Video" tab not found in popup');
-    }
-
-    // Step 4c: Select x1 (single output) — popup shows x1/x2/x3/x4
-    // Default is x2 which wastes double credits. Click x1 first.
-    try {
-      await genPage.waitForSelector('button:has-text("x1")', { state: 'visible', timeout: 2000 });
-      const x1Btns = await genPage.$$('button:has-text("x1")');
-      for (const btn of x1Btns) {
-        if (await btn.isVisible().catch(() => false)) {
-          await btn.click();
-          console.log('[FlowProxy:BROWSER] ✅ x1 selected (single output)');
-          await sleep(300);
-          break;
-        }
-      }
-    } catch { console.log('[FlowProxy:BROWSER] x1 button not found in popup'); }
-
-    // Step 4d: Click outside popup to close it
-    await genPage.mouse.click(300, 300); // click empty canvas area
-    await sleep(1200); // give React time to commit the mode change
-
-    // Verify video mode is active
-    const pillText = await genPage.evaluate(() => {
-      // Find all buttons and log their text to find the pill
-      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
-      const btnsInfo = allBtns.map(b => b.innerText?.trim().slice(0,40)).filter(Boolean);
-      console.log('[PillCheck]', JSON.stringify(btnsInfo));
-      // The pill now says "Video □ x2" when video mode is active
-      const videoBtn = allBtns.find(b => b.innerText?.includes('Video'));
-      return videoBtn?.innerText?.trim() || btnsInfo.join(' | ').slice(0,100);
-    });
-    console.log(`[FlowProxy:BROWSER] Mode check: "${pillText}"`);
-    const isVideoMode = pillText.toLowerCase().includes('video');
-    console.log(`[FlowProxy:BROWSER] Video mode active: ${isVideoMode}`);
-
-
-    // Step 6: Type prompt — ensure popup is fully closed first
-    await sleep(1500); // Extra wait for popup to fully dismiss after canvas click
-    
-    let inputEl = null;
-    for (const sel of ['[contenteditable="true"]', 'textarea', '[role="textbox"]']) {
-      try {
-        const el = await genPage.$(sel);
-        if (el && await el.isVisible().catch(() => false)) {
-          // Click to focus, then clear any existing text
-          await el.click(); await sleep(500);
+          await sleep(400);
+          // Clear existing text
           await genPage.keyboard.press('Control+A');
-          await genPage.keyboard.press('Delete'); // Clear before typing
+          await sleep(100);
+          await genPage.keyboard.press('Delete');
           await sleep(200);
-          await el.type(prompt, { delay: 40 });
-          await sleep(800);
+          // Type the prompt
+          await el.type(prompt, { delay: 35 });
+          await sleep(600);
+          const typed = await el.evaluate(e => e.innerText || e.value || '').catch(() => '');
+          console.log(`[FlowProxy:BROWSER] Video prompt typed: "${typed.slice(0, 50)}"`);
           inputEl = el;
-          // Verify text was typed
-          const typed = await el.evaluate(e => e.innerText || e.value || '');
-          console.log(`[FlowProxy:BROWSER] Video prompt typed: "${typed.slice(0,40)}"`);
           break;
         }
-      } catch {}
+      } catch(e) {
+        console.warn(`[FlowProxy:BROWSER] Input selector "${sel}" failed: ${e.message}`);
+      }
     }
-    if (!inputEl) throw new Error('Video prompt input not found');
+
+    if (!inputEl) throw new Error('Video prompt input not found — check Flow UI selectors');
 
     await genPage.evaluate(() => {
       const el = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
@@ -609,38 +932,106 @@ async function browserGenerateVideo(prompt, options = {}) {
     });
     await sleep(800);
 
-    // Step 7: Press Enter — if Flow is in video mode, this fires batchGenerateVideos
-    // Step 7: Try multiple trigger methods — Enter alone may not work after mode switch
+    // Step 7: Trigger video generation
+    //
+    // ROOT CAUSE (confirmed from logs):
+    //   When text is typed in the input, a "Clear prompt" (×) button appears.
+    //   It becomes the RIGHTMOST toolbar button, so our "find rightmost = send" logic
+    //   was clicking "Clear prompt" instead of the generate arrow.
+    //   Log evidence: "Clicking send button at (919,641) text='close\nClear prompt'"
+    //
+    // THE FIX:
+    //   PRIMARY: keyboard.press('Enter') on focused input — no button detection needed.
+    //   Mode is confirmed video=true, so Enter fires batchAsyncGenerateVideoText.
+    //   This matches how a human generates: focus input → type → press Enter.
+    //
+    //   FALLBACK: find the GENERATE button by excluding "clear"/"close" buttons.
+    //   The generate button has aria-label "Create" or "arrow_forward" icon text.
     console.log('[FlowProxy:BROWSER] Triggering video generation...');
 
-    // Trigger generation: Enter key only (proven reliable, avoids double-generation)
-    // DO NOT also click the send button — that causes two API calls = 2x credit waste
-    console.log('[FlowProxy:BROWSER] Pressing Enter to generate video...');
+    // Focus the input so Enter key goes to it
     try {
       await inputEl.click();
       await sleep(300);
-      await inputEl.press('Enter');
-      console.log('[FlowProxy:BROWSER] Enter pressed on input');
+    } catch {}
+
+    let triggered = false;
+
+    // PRIMARY: Enter key on focused input (simplest, most reliable, no button detection)
+    try {
+      await genPage.keyboard.press('Enter');
+      triggered = true;
+      generationTriggered = true; // now accept batchCheckAsyncVideoGenerationStatus responses
+      console.log('[FlowProxy:BROWSER] ✅ Enter key pressed on focused input');
+      await sleep(500);
     } catch(e) {
-      console.log('[FlowProxy:BROWSER] Enter failed:', e.message);
+      console.log('[FlowProxy:BROWSER] Enter key failed:', e.message);
     }
+
+    // FALLBACK: find the actual generate/arrow button, explicitly skip "clear" buttons
+    if (!triggered) {
+      const generateBtnCoords = await genPage.evaluate(() => {
+        const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
+        if (!input) return null;
+        const inputRect = input.getBoundingClientRect();
+        const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+
+        // Filter to toolbar buttons near the input
+        const toolbarBtns = allBtns
+          .filter(b => {
+            const r = b.getBoundingClientRect();
+            return r.width > 15 && r.height > 15
+                && Math.abs((r.top + r.height/2) - (inputRect.top + inputRect.height/2)) < 80;
+          })
+          .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+
+        // EXCLUDE "clear" / "close" buttons — they appear when text is typed
+        const generateBtn = [...toolbarBtns].reverse().find(b => {
+          const text = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
+          return !text.includes('clear') && !text.includes('close') && !text.includes('delete');
+        });
+
+        if (!generateBtn) return null;
+        const r = generateBtn.getBoundingClientRect();
+        const btnText = generateBtn.innerText?.trim().slice(0, 40);
+        const aria = generateBtn.getAttribute('aria-label');
+        return { x: r.x + r.width/2, y: r.y + r.height/2, text: btnText, aria };
+      }).catch(() => null);
+
+      if (generateBtnCoords) {
+        try {
+          console.log(`[FlowProxy:BROWSER] Fallback: clicking generate button at (${Math.round(generateBtnCoords.x)},${Math.round(generateBtnCoords.y)}) aria="${generateBtnCoords.aria}" text="${generateBtnCoords.text}"`);
+          // Re-focus input first, then click the button
+          await inputEl.click();
+          await sleep(200);
+          await genPage.mouse.click(generateBtnCoords.x, generateBtnCoords.y);
+          triggered = true;
+          generationTriggered = true;
+          console.log('[FlowProxy:BROWSER] ✅ Generate button mouse.click fired');
+        } catch(e) {
+          console.log('[FlowProxy:BROWSER] Generate button click failed:', e.message);
+        }
+      } else {
+        console.warn('[FlowProxy:BROWSER] ⚠️ No generate button found — generation may not trigger');
+      }
+    }
+
 
     // Step 8: Wait for async job to start — with retry trigger at 30s
     console.log('[FlowProxy:BROWSER] Waiting for video job to start...');
 
-    // After 30s with no response, try pressing Enter again (prompt may have lost focus)
+    // After 30s with no response, retry via send button then Enter
     const retryTimer = setTimeout(async () => {
-      console.log('[FlowProxy:BROWSER] No response after 30s — retrying Enter...');
+      console.log('[FlowProxy:BROWSER] No response after 30s — retrying...');
       try {
-        // Re-find and re-focus the input
         const el = await genPage.$('[contenteditable="true"]') || await genPage.$('textarea');
         if (el) {
-          await el.click();
-          await sleep(300);
-          await el.press('Enter');
-          console.log('[FlowProxy:BROWSER] Retry Enter pressed');
+          // Primary retry: Enter key (avoids clear button detection bug)
+          await el.click(); await sleep(300);
+          await genPage.keyboard.press('Enter');
+          console.log('[FlowProxy:BROWSER] Retry Enter key pressed');
         }
-      } catch(e) { console.log('[FlowProxy:BROWSER] Retry Enter failed:', e.message); }
+      } catch(e) { console.log('[FlowProxy:BROWSER] Retry failed:', e.message); }
     }, 30000);
 
     const mediaInfo = await Promise.race([
@@ -764,29 +1155,41 @@ async function browserGenerateVideo(prompt, options = {}) {
 
     if (!videoUrl) throw new Error('Video did not complete within 10 minutes');
         console.log(`[FlowProxy:BROWSER] ✅ Video: ${videoUrl}`);
-    if (usingWarmPage) {
-      sleep(1000).then(() =>
-        warmPage.goto('https://labs.google/fx/tools/flow', { waitUntil: 'domcontentloaded', timeout: 15000 })
-          .catch(() => {})
-      );
-    }
     return { success: true, output_url: videoUrl, metadata: { projectId } };
 
-  } finally { await genPage.close().catch(()=>{}); }
+  } finally {
+    await genPage.close().catch(() => {});
+    await vidRelease(); // return slot to pool
+    console.log(`[FlowProxy:BROWSER] Pool slot ${vidSlot} released`);
+  }
 }
 
 // ── Keep-alive ────────────────────────────────────────────────
 async function browserKeepAlive() {
-  if (!ready || !bContext) return false;
+  if (!_initDone) return false;
   try {
-    const p = await bContext.newPage();
-    await p.goto('https://labs.google/fx/api/auth/session', { waitUntil: 'domcontentloaded', timeout: 10000 });
-    const text = await p.evaluate(() => document.body.innerText).catch(() => '{}');
-    await p.close();
-    const data = JSON.parse(text);
-    if (data?.user?.email) { console.log(`[FlowProxy:BROWSER] Session alive — ${data.user.email}`); return true; }
-    ready = false; await browserInit(); return true;
-  } catch(e) { console.error('[FlowProxy:BROWSER] Keep-alive error:', e.message); ready = false; return false; }
+    // Use the warmPage for keepalive ping — it stays open between generations
+    if (warmPage) {
+      await warmPage.goto('https://labs.google/fx/api/auth/session', {
+        waitUntil: 'domcontentloaded', timeout: 10000
+      });
+      const text = await warmPage.evaluate(() => document.body.innerText).catch(() => '{}');
+      const data = JSON.parse(text);
+      if (data?.user?.email) {
+        console.log(`[FlowProxy:BROWSER] Session alive — ${data.user.email}`);
+        return true;
+      }
+      // Session genuinely expired — cannot auto-fix, needs captureSession.js
+      console.error('[FlowProxy:BROWSER] ❌ Keep-alive: session expired');
+      console.error('[FlowProxy:BROWSER] Run: node scripts/captureSession.js');
+      _initDone = false;
+      return false;
+    }
+    return _initDone;
+  } catch(e) {
+    console.error('[FlowProxy:BROWSER] Keep-alive error:', e.message);
+    return false;
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────
@@ -808,8 +1211,17 @@ async function init() {
   else console.log('[FlowProxy:MOCK] Ready');
 }
 async function destroy() {
-  if (browser) { await browser.close(); browser = null; bContext = null; ready = false; }
-  cachedProjectId = null; // reset project cache on restart
+  _initDone = false;
+  if (warmPage) { try { await warmPage.close(); } catch {} warmPage = null; }
+  await browserPool.destroyPool(); // closes all pool contexts
+  if (browser) { await browser.close().catch(() => {}); browser = null; bContext = null; }
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-module.exports = { init, destroy, generateImage, generateVideo, keepAlive };
+module.exports = {
+  init:          browserInit,
+  generateImage,
+  generateVideo,
+  keepAlive:     browserKeepAlive,
+  destroy,
+  getPoolStatus: () => browserPool.getPoolStatus(),
+};

@@ -1,146 +1,170 @@
-// server.js — Express app entry point
+// server.js — Phase 2 hardened
 require('dotenv').config();
 
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const cors    = require('cors');
+const path    = require('path');
 
-// ─── Routes ──────────────────────────────────────────────────
+// ── Middleware ─────────────────────────────────────────────────────────────
+const { correlationMiddleware, sysLogger } = require('./middleware/logger');
+
+// ── Routes ─────────────────────────────────────────────────────────────────
 const authRoutes     = require('./routes/auth');
 const generateRoutes = require('./routes/generate');
 const jobsRoutes     = require('./routes/jobs');
+const adminRoutes    = require('./routes/admin');
 
-// ─── Services ────────────────────────────────────────────────
-const flowProxy      = require('./services/flowProxy');
-const { startWorker } = require('./services/queue');
-const sessionKeeper  = require('./services/sessionKeeper');
+// ── Services ────────────────────────────────────────────────────────────────
+const flowProxy               = require('./services/flowProxy');
+const { startWorker }         = require('./services/queue');
+const sessionKeeper           = require('./services/sessionKeeper');
+const { seedTestUser, pruneExpiredTokens } = require('./db');
 
 const PORT = parseInt(process.env.PORT || '3001');
-const app = express();
+const app  = express();
 
-// ─── Middleware ───────────────────────────────────────────────
+// ── Global middleware ────────────────────────────────────────────────────────
 app.use(cors({
-  origin: '*', // POC: allow all origins
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-License-Key', 'Authorization'],
+  origin:         '*',
+  methods:        ['GET', 'POST', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'X-License-Key', 'Authorization', 'X-Correlation-ID'],
+  exposedHeaders: ['X-Correlation-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'Retry-After'],
 }));
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve local mock assets (images + videos) — no external URLs needed
-app.use('/mock-assets', express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res) => {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Accept-Ranges', 'bytes'); // required for HTML5 video scrubbing
-  }
-}));
+// Correlation ID + structured request logger (Phase 1)
+app.use(correlationMiddleware);
 
-// Request logger
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - start;
-    console.log(`[HTTP] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms)`);
-  });
-  next();
-});
+// ── Routes ──────────────────────────────────────────────────────────────────
+app.use('/api',           authRoutes);      // /api/auth/* + /api/validate-key + /api/register
+app.use('/api/generate',  generateRoutes);  // /api/generate/image + /api/generate/video
+app.use('/api/jobs',      jobsRoutes);      // /api/jobs/:id + /api/jobs
+app.use('/api/admin',     adminRoutes);     // /api/admin/* (requires admin role)
 
-// ─── Routes ──────────────────────────────────────────────────
-app.use('/api', authRoutes);
-app.use('/api/generate', generateRoutes);
-app.use('/api/jobs', jobsRoutes);
-
-// Health check
+// ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
-    status: 'ok',
-    version: '1.0.0-poc',
-    mode: process.env.FLOW_MODE || 'mock',
+    status:    'ok',
+    version:   '2.0.0-phase2',
+    mode:      process.env.FLOW_MODE || 'mock',
     timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
+    uptime:    Math.floor(process.uptime()),
   });
 });
 
-// 404 handler
+// ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: 'NOT_FOUND', path: req.path });
 });
 
-// Error handler
+// ── Global error handler ──────────────────────────────────────────────────────
+// Catches any unhandled errors thrown in route handlers
 app.use((err, req, res, next) => {
-  console.error('[Server Error]', err);
+  req.log?.sys.error('Unhandled error', { error: err.message, stack: err.stack?.slice(0, 500) });
+  sysLogger.error('server', 'Unhandled request error', {
+    correlationId: req.correlationId,
+    error:         err.message,
+    path:          req.path,
+    method:        req.method,
+  });
+
   res.status(500).json({
-    error: 'INTERNAL_ERROR',
-    message: err.message,
+    error:          'INTERNAL_ERROR',
+    message:        process.env.NODE_ENV === 'production' ? 'An internal error occurred' : err.message,
+    correlation_id: req.correlationId,
   });
 });
 
-// ─── Startup ─────────────────────────────────────────────────
+// ── Unhandled rejection safety net ───────────────────────────────────────────
+process.on('unhandledRejection', (reason) => {
+  sysLogger.error('server', 'UnhandledRejection', { error: String(reason) });
+  console.error('[UnhandledRejection]', reason);
+});
+
+// ── Startup ───────────────────────────────────────────────────────────────────
 async function start() {
   console.log('');
   console.log('╔════════════════════════════════════════╗');
   console.log('║     AI Creative Studio POC Backend     ║');
   console.log('╚════════════════════════════════════════╝');
   console.log('');
-  console.log(`  Mode:  ${(process.env.FLOW_MODE || 'mock').toUpperCase()}`);
-  console.log(`  Port:  ${PORT}`);
-  console.log(`  Redis: ${process.env.REDIS_URL || 'redis://localhost:6379'}`);
+  console.log(`  Mode:    ${(process.env.FLOW_MODE || 'mock').toUpperCase()}`);
+  console.log(`  Port:    ${PORT}`);
+  console.log(`  Redis:   ${process.env.REDIS_URL || 'redis://localhost:6379'}`);
+  console.log(`  Auth:    JWT (HS256) + X-License-Key (legacy compat)`);
   console.log('');
 
-  // Initialize Flow proxy
+  // Seed test user + schema migration
+  seedTestUser();
+
+  // Prune expired refresh tokens at startup and every hour
+  if (typeof pruneExpiredTokens === 'function') {
+    pruneExpiredTokens();
+    setInterval(pruneExpiredTokens, 60 * 60 * 1000);
+  }
+
+  // Init browser (non-blocking for mock mode)
   try {
     await flowProxy.init();
   } catch (err) {
-    console.error('[Startup] FlowProxy init error (non-fatal):', err.message);
-    if (process.env.FLOW_MODE === 'browser' || process.env.FLOW_MODE === 'api') {
-      console.warn('[Startup] ⚠️  Flow init failed. Set FLOW_MODE=mock to test without credentials.');
-    }
+    sysLogger.warn('server', 'FlowProxy init failed — server still starts', { error: err.message });
+    console.warn(`[Server] FlowProxy init warning: ${err.message}`);
   }
 
   // Start BullMQ worker
-  try {
-    startWorker();
-  } catch (err) {
-    console.error('[Startup] Worker start error:', err.message);
-    console.warn('[Startup] ⚠️  Jobs will be queued but not processed until Redis is available.');
-  }
+  startWorker();
 
-  // Start session keeper
+  // Start session keepalive
   sessionKeeper.start();
 
-  // Start HTTP server
-  app.listen(PORT, () => {
+  // Start listening
+  const server = app.listen(PORT, () => {
+    sysLogger.info('server', `Server running on port ${PORT}`);
     console.log(`✅ Server running at http://localhost:${PORT}`);
     console.log('');
     console.log('  Endpoints:');
-    console.log(`  POST /api/validate-key`);
-    console.log(`  POST /api/register`);
-    console.log(`  POST /api/generate/image  (requires X-License-Key)`);
-    console.log(`  POST /api/generate/video  (requires X-License-Key)`);
-    console.log(`  GET  /api/jobs/:id        (requires X-License-Key)`);
-    console.log(`  GET  /health`);
+    console.log('  POST /api/auth/login       (exchange license key for JWT)');
+    console.log('  POST /api/auth/refresh     (refresh access token)');
+    console.log('  POST /api/auth/logout      (revoke session)');
+    console.log('  GET  /api/auth/me          (current user)');
+    console.log('  POST /api/validate-key     (legacy — still works)');
+    console.log('  POST /api/generate/image   (requires auth)');
+    console.log('  POST /api/generate/video   (requires auth)');
+    console.log('  GET  /api/jobs/:id         (requires auth)');
+        console.log('  GET  /health');
     console.log('');
-    console.log('  Test key: poc-test-key-12345678');
+    console.log(`  Test key: poc-test-key-12345678`);
     console.log('');
   });
+
+  // ── Graceful shutdown ────────────────────────────────────────────────────
+  async function shutdown(signal) {
+    sysLogger.info('server', `${signal} received — shutting down gracefully`);
+    console.log(`\n[Server] ${signal} received — shutting down...`);
+
+    sessionKeeper.stop();
+
+    server.close(async () => {
+      const { stopWorker } = require('./services/queue');
+      await stopWorker();
+      sysLogger.info('server', 'Clean shutdown complete');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      sysLogger.error('server', 'Forced shutdown after timeout');
+      process.exit(1);
+    }, 10_000);
+  }
+
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-// ─── Graceful shutdown ────────────────────────────────────────
-async function shutdown(signal) {
-  console.log(`\n[Server] ${signal} received — shutting down...`);
-  sessionKeeper.stop();
-  await flowProxy.destroy().catch(() => {});
-  process.exit(0);
-}
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
-process.on('uncaughtException', (err) => {
-  console.error('[Uncaught]', err);
+start().catch(err => {
+  sysLogger.error('server', 'Failed to start', { error: err.message });
+  console.error('[Server] Failed to start:', err);
+  process.exit(1);
 });
-process.on('unhandledRejection', (reason) => {
-  console.error('[UnhandledRejection]', reason);
-});
-
-start();

@@ -1,7 +1,10 @@
-// routes/jobs.js
+// routes/jobs.js — Phase 1 updated
+// Change: getJob → getJobForUser (Phase 1 db.js rename for IDOR protection)
+// The new function takes (jobId, userId) and returns null if user doesn't own the job,
+// so the separate ownership check below is now redundant but kept for clarity.
 const express = require('express');
-const keyAuth = require('../middleware/keyAuth');
-const { getJob, getJobsByUser } = require('../db');
+const keyAuth  = require('../middleware/keyAuth');
+const { getJobForUser, getJobsByUser } = require('../db');
 const { getQueueStats } = require('../services/queue');
 
 const router = express.Router();
@@ -16,42 +19,34 @@ router.get('/:id', (req, res) => {
     return res.status(400).json({ error: 'INVALID_JOB_ID' });
   }
 
-  const job = getJob(id);
+  // getJobForUser enforces ownership at DB level — returns null if job
+  // belongs to a different user (IDOR protection from Phase 1)
+  const job = getJobForUser(id, req.user.id);
 
   if (!job) {
+    // Could be not found OR belongs to another user — return 404 for both
+    // (never confirm a job exists to a user who doesn't own it)
     return res.status(404).json({
-      error: 'JOB_NOT_FOUND',
-      message: `Job ${id} does not exist`,
+      error:   'JOB_NOT_FOUND',
+      message: `Job ${id} not found`,
     });
   }
 
-  // Ensure user can only access their own jobs
-  if (job.user_id !== req.user.id) {
-    return res.status(403).json({
-      error: 'FORBIDDEN',
-      message: 'You do not have access to this job',
-    });
-  }
-
-  // Parse metadata safely
   let metadata = {};
-  try {
-    metadata = JSON.parse(job.metadata || '{}');
-  } catch {}
+  try { metadata = JSON.parse(job.metadata || '{}'); } catch {}
 
   return res.json({
-    job_id: job.id,
-    type: job.type,
-    status: job.status,
-    prompt: job.prompt,
+    job_id:     job.id,
+    type:       job.type,
+    status:     job.status,
+    prompt:     job.prompt,
     output_url: job.output_url || null,
-    error: job.error || null,
+    error:      job.error      || null,
     metadata,
     created_at: job.created_at,
     updated_at: job.updated_at,
-    // Hints for the frontend
-    is_done: job.status === 'completed' || job.status === 'failed',
-    poll_again: job.status === 'queued' || job.status === 'processing',
+    is_done:    job.status === 'completed' || job.status === 'failed',
+    poll_again: job.status === 'queued'    || job.status === 'processing',
   });
 });
 
@@ -61,10 +56,10 @@ router.get('/', (req, res) => {
 
   return res.json({
     jobs: jobs.map(job => ({
-      job_id: job.id,
-      type: job.type,
-      status: job.status,
-      prompt: job.prompt.slice(0, 80) + (job.prompt.length > 80 ? '...' : ''),
+      job_id:     job.id,
+      type:       job.type,
+      status:     job.status,
+      prompt:     job.prompt.slice(0, 80) + (job.prompt.length > 80 ? '...' : ''),
       output_url: job.output_url || null,
       created_at: job.created_at,
     })),
@@ -72,7 +67,7 @@ router.get('/', (req, res) => {
   });
 });
 
-// GET /api/jobs/stats/queue — Queue stats (for debugging)
+// GET /api/jobs/stats/queue — Queue stats (admin/debug)
 router.get('/stats/queue', async (req, res) => {
   try {
     const stats = await getQueueStats();
