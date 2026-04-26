@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pool_size:
-        description: 'Pool size (concurrent users)'
+        description: 'Browser pool size (concurrent users)'
         required: true
         default: '2'
         type: choice
@@ -14,7 +14,7 @@ on:
           - '3'
           - '4'
       session_duration:
-        description: 'Server alive duration (minutes)'
+        description: 'How long to keep server alive (minutes)'
         required: true
         default: '60'
 
@@ -31,6 +31,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: poc-backend/package-lock.json
 
       - name: Install and start Redis
         run: |
@@ -39,7 +41,7 @@ jobs:
           sudo systemctl start redis-server
           redis-cli ping
 
-      - name: Install backend dependencies
+      - name: Install dependencies
         working-directory: poc-backend
         run: npm ci
 
@@ -47,7 +49,7 @@ jobs:
         working-directory: poc-backend
         run: npx playwright install chromium --with-deps
 
-      - name: Create env file
+      - name: Create .env file
         working-directory: poc-backend
         run: |
           echo "PORT=3001" > .env
@@ -60,6 +62,7 @@ jobs:
           echo "BROWSER_POOL_SIZE=${{ github.event.inputs.pool_size }}" >> .env
           echo "CREDIT_WARN_THRESHOLD=500" >> .env
           echo "CREDIT_CRITICAL_THRESHOLD=50" >> .env
+          echo ".env created successfully"
 
       - name: Setup directories
         working-directory: poc-backend
@@ -69,15 +72,18 @@ jobs:
         working-directory: poc-backend
         run: |
           nohup node server.js > logs/server.log 2>&1 &
-          echo "Waiting for server..."
+          echo $! > server.pid
+          echo "Server PID: $(cat server.pid)"
+          echo "Waiting for server to start..."
           for i in $(seq 1 40); do
             if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
-              echo "Server is up"
+              echo "Server is up after $((i*3)) seconds"
+              curl http://localhost:3001/health
               break
             fi
+            echo "  Attempt $i/40 — waiting 3s..."
             sleep 3
           done
-          curl http://localhost:3001/health
 
       - name: Install ngrok
         run: |
@@ -96,33 +102,36 @@ jobs:
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])")
           echo "PUBLIC_URL=${PUBLIC_URL}" >> $GITHUB_ENV
-          echo "=============================="
+          echo "======================================"
           echo "PUBLIC URL: ${PUBLIC_URL}"
-          echo "=============================="
+          echo "======================================"
+          echo "Health check: ${PUBLIC_URL}/health"
+          echo "======================================"
 
-      - name: Show connection info
+      - name: Print test instructions
         run: |
           echo "=================================="
           echo "SERVER IS LIVE"
           echo "Public URL : ${{ env.PUBLIC_URL }}"
           echo "API URL    : ${{ env.PUBLIC_URL }}/api"
-          echo "Health     : ${{ env.PUBLIC_URL }}/health"
           echo "=================================="
-          echo "Set this in tester Electron .env:"
+          echo "Tester Electron .env setting:"
           echo "VITE_API_URL=${{ env.PUBLIC_URL }}"
           echo "=================================="
 
-      - name: Keep alive
+      - name: Keep server alive during testing
         run: |
-          MINS=${{ github.event.inputs.session_duration }}
-          echo "Running for ${MINS} minutes. Cancel workflow to stop early."
-          for i in $(seq 1 $((MINS / 5))); do
+          DURATION=${{ github.event.inputs.session_duration }}
+          echo "Server will run for ${DURATION} minutes"
+          echo "Cancel this workflow manually when done"
+          for i in $(seq 1 $((DURATION / 5))); do
             sleep 300
-            echo "=== $(date) health check ==="
+            echo "=== Health check $(date) ==="
             curl -s http://localhost:3001/health | python3 -m json.tool || true
-            tail -10 poc-backend/logs/server.log
+            echo "=== Recent server log ==="
+            tail -10 poc-backend/logs/server.log || true
           done
 
-      - name: Print final logs
+      - name: Print server logs
         if: always()
-        run: tail -50 poc-backend/logs/server.log || true
+        run: tail -100 poc-backend/logs/server.log || true
