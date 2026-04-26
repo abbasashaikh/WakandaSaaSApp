@@ -1,48 +1,56 @@
-// src/renderer/store/appStore.js — Global state (Zustand)
+// src/renderer/store/appStore.js — Global Zustand store
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { getMe } from '../api'
 
-const STORAGE_KEY = 'yb-poc-store'
+export const useAppStore = create((set, get) => ({
 
-export const useAppStore = create(
-  persist(
-    (set, get) => ({
-      // ─── Auth ─────────────────────────────────────────────
-      licenseKey: null,
-      user: null,
-      subscription: null,
-      isAuthenticated: false,
+  // ── Auth (Phase 5) ─────────────────────────────────────────────────────────
+  user:         null,
+  isLoggedIn:   false,
+  authChecked:  false,
 
-      setAuth: (licenseKey, user, subscription) =>
-        set({ licenseKey, user, subscription, isAuthenticated: true }),
+  setUser:        (user) => set({ user, isLoggedIn: !!user, authChecked: true }),
+  clearUser:      ()     => set({ user: null, isLoggedIn: false }),
+  setAuthChecked: ()     => set({ authChecked: true }),
 
-      clearAuth: () =>
-        set({ licenseKey: null, user: null, subscription: null, isAuthenticated: false }),
-
-      // ─── Job history (in-memory, not persisted) ────────────
-      recentJobs: [],
-
-      addJob: (job) =>
-        set((state) => ({
-          recentJobs: [job, ...state.recentJobs].slice(0, 20),
-        })),
-
-      updateJob: (jobId, updates) =>
-        set((state) => ({
-          recentJobs: state.recentJobs.map((j) =>
-            j.job_id === jobId ? { ...j, ...updates } : j
-          ),
-        })),
-    }),
-    {
-      name: STORAGE_KEY,
-      // Only persist auth fields
-      partialize: (state) => ({
-        licenseKey: state.licenseKey,
-        user: state.user,
-        subscription: state.subscription,
-        isAuthenticated: state.isAuthenticated,
-      }),
+  checkAuth: async () => {
+    try {
+      const tokens = await window.electronAPI?.auth.getTokens()
+      if (!tokens?.accessToken) {
+        set({ authChecked: true, isLoggedIn: false })
+        return false
+      }
+      const user = await getMe()
+      set({ user, isLoggedIn: true, authChecked: true })
+      return true
+    } catch {
+      await window.electronAPI?.auth.clearTokens()
+      set({ authChecked: true, isLoggedIn: false })
+      return false
     }
-  )
-)
+  },
+
+  // ── Job management ─────────────────────────────────────────────────────────
+  jobs: {},
+
+  addJob: (job) => set(s => ({
+    jobs: { ...s.jobs, [job.job_id]: job },
+  })),
+
+  updateJob: (jobId, updates) => set(s => ({
+    jobs: { ...s.jobs, [jobId]: { ...(s.jobs[jobId] || {}), ...updates } },
+  })),
+
+  getJob: (jobId) => get().jobs[jobId] || null,
+
+  // ── History (Phase 7) ──────────────────────────────────────────────────────
+  history:        [],
+  setHistory:     (history) => set({ history }),
+  prependHistory: (job) => set(s => ({
+    history: [job, ...s.history.filter(h => h.job_id !== job.job_id)].slice(0, 50),
+  })),
+
+  // ── Session health (Phase 8) ───────────────────────────────────────────────
+  sessionWarning:    null,
+  setSessionWarning: (msg) => set({ sessionWarning: msg }),
+}))

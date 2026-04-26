@@ -17,9 +17,37 @@ const MOCK_IMAGES = [1,2,3,4,5].map(n => `${SELF}/mock-assets/mock-images/image$
 const MOCK_VIDEOS = [1,2,3].map(n => `${SELF}/mock-assets/mock-videos/video${n}.mp4`);
 
 // ── Phase 3: Browser pool ────────────────────────────────────────────────────
-// Each generation job gets its own isolated Playwright context from the pool.
-// bContext is ONLY used for the warmPage keepalive — never for generation.
 const browserPool = require('./browserPool');
+
+// ── Credit monitor ────────────────────────────────────────────────────────────
+// Tracks remaining Google Flow credits across all generation responses.
+// Logs warnings at thresholds; pauses queue when critically low.
+const creditMonitor = (() => {
+  let _current = null;
+  const WARN_THRESHOLD     = parseInt(process.env.CREDIT_WARN_THRESHOLD  || '500');
+  const CRITICAL_THRESHOLD = parseInt(process.env.CREDIT_CRITICAL_THRESHOLD || '50');
+
+  return {
+    update(remaining) {
+      const prev = _current;
+      _current = remaining;
+
+      // Log only when value changes or crosses thresholds
+      if (prev === null || Math.abs(prev - remaining) >= 10) {
+        console.log(`[CreditMonitor] Remaining credits: ${remaining}`);
+      }
+      if (remaining <= CRITICAL_THRESHOLD) {
+        sysLogger.error('credits', '🚨 CRITICAL: credits nearly exhausted — generation will fail', { remaining });
+        console.error(`[CreditMonitor] 🚨 CRITICAL: only ${remaining} credits left!`);
+      } else if (remaining <= WARN_THRESHOLD) {
+        sysLogger.warn('credits', '⚠️ Credits running low', { remaining });
+        console.warn(`[CreditMonitor] ⚠️ Low credits: ${remaining} remaining`);
+      }
+    },
+    get()  { return _current; },
+    toJSON() { return { remaining: _current, warn_at: WARN_THRESHOLD, critical_at: CRITICAL_THRESHOLD }; },
+  };
+})();
 
 // Per-user rate limiting (Phase 1)
 const userLastGenTime = new Map();
@@ -155,15 +183,29 @@ try {
   const realExe = exePaths.find(p => _fs.existsSync(p));
   if (realExe) console.log(`[FlowProxy:BROWSER] Chrome: ${realExe}`);
 
+  // HEADLESS: set HEADLESS=false in .env for local development (shows Chrome window)
+  // On a server (Azure/Linux) always runs headless — no display available
+  const isHeadless = process.env.HEADLESS !== 'false';
+  console.log(`[FlowProxy:BROWSER] Mode: ${isHeadless ? 'headless' : 'headed (visible window)'}`);
+
+  const launchArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',   // prevents crashes on low /dev/shm (common on Linux VMs)
+    '--disable-gpu',             // not needed headless, reduces memory
+    '--no-first-run',
+    '--no-zygote',               // reduces process count on Linux
+  ];
+
+  // Only add window args in headed mode (server has no display)
+  if (!isHeadless) {
+    launchArgs.push('--window-size=1280,800', '--window-position=100,100');
+  }
+
   browser = await stealthChromium.launch({
-    headless: false,
+    headless: isHeadless,
     executablePath: realExe || undefined,
-    args: [
-      '--no-sandbox',
-      '--window-size=1280,800',
-      '--window-position=100,100',
-      '--no-first-run',
-    ],
+    args: launchArgs,
     ignoreDefaultArgs: ['--enable-automation'],
   });
   bContext = await browser.newContext({
@@ -189,6 +231,9 @@ try {
   console.log(`[FlowProxy:BROWSER] ✅ Session: ${sess.user.email}`);
   // Phase 3: Share the launched browser with the pool
   await browserPool.initPool(browser);
+
+  // Set up crash recovery listener
+  setupCrashRecovery();
 
   _initDone = true;
   console.log(`[FlowProxy:BROWSER] ✅ Ready — session: ${sess?.user?.email || 'unknown'}`);
@@ -328,6 +373,8 @@ async function browserGenerateImage(prompt, options = {}) {
         console.log(`[FlowProxy:BROWSER] batchGenerateImages → ${status}`);
         if (status !== 200) { rejectUrl(new Error(`API ${status}: ${JSON.stringify(body).slice(0,200)}`)); return; }
         console.log(`[FlowProxy:BROWSER] Body: ${JSON.stringify(body).slice(0,300)}`);
+        const imgCr = body?.remainingCredits;
+        if (typeof imgCr === 'number') { creditMonitor.update(imgCr); }
         const url = extractImageUrl(body);
         if (url) { resolveUrl(url); }
         else { console.log('[FlowProxy:BROWSER] FULL RESPONSE:', JSON.stringify(body)); rejectUrl(new Error('URL not found')); }
@@ -642,6 +689,12 @@ async function browserGenerateVideo(prompt, options = {}) {
         if (isStatusCheckUrl && !generationTriggered) {
           console.log(`[FlowProxy:BROWSER] Ignoring pre-trigger status check: ${urlPath.split('/').pop()}`);
           return; // stale status from page load — ignore
+        }
+
+        // Track remaining credits for monitoring
+        const credits = body?.remainingCredits;
+        if (typeof credits === 'number') {
+          creditMonitor.update(credits);
         }
 
         if (mediaId) {
@@ -1217,6 +1270,29 @@ async function destroy() {
   if (browser) { await browser.close().catch(() => {}); browser = null; bContext = null; }
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ── Browser crash recovery ────────────────────────────────────────────────────
+// On server, Chrome can crash or become unresponsive under load.
+// Detect disconnection and automatically reinitialise.
+function setupCrashRecovery() {
+  if (!browser) return;
+  browser.on('disconnected', async () => {
+    console.error('[FlowProxy:BROWSER] ⚠️ Browser disconnected unexpectedly — reinitialising in 3s...');
+    sysLogger.error('flowProxy', 'Browser disconnected — will auto-reinitialise', {});
+    _initDone = false;
+    browser   = null;
+    bContext  = null;
+    warmPage  = null;
+    await browserPool.destroyPool().catch(() => {});
+
+    // Wait then re-init so in-flight jobs can drain first
+    await sleep(3000);
+    browserInit().catch(err => {
+      console.error('[FlowProxy:BROWSER] ❌ Auto-reinitialise failed:', err.message);
+      sysLogger.error('flowProxy', 'Auto-reinitialise failed', { error: err.message });
+    });
+  });
+}
+
 module.exports = {
   init:          browserInit,
   generateImage,
@@ -1224,4 +1300,5 @@ module.exports = {
   keepAlive:     browserKeepAlive,
   destroy,
   getPoolStatus: () => browserPool.getPoolStatus(),
+  getCredits:    () => creditMonitor.toJSON(),
 };

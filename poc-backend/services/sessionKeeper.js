@@ -1,60 +1,45 @@
 // services/sessionKeeper.js
-// ============================================================
-// Cron job that keeps the Flow session alive every 10 minutes
-// Auto re-logs if session expires
-// ============================================================
-const cron = require('node-cron');
-const flowProxy = require('./flowProxy');
+// Periodically pings labs.google to keep the Playwright browser session alive.
+// If the session dies (cookie expired), browser keepalive ping will fail and log a warning.
 
-let cronTask = null;
-let lastPingAt = null;
-let consecutiveFailures = 0;
-const MAX_FAILURES = 3;
+const { sysLogger } = require('../middleware/logger');
 
-function start() {
-  // Run every 10 minutes
-  cronTask = cron.schedule('*/10 * * * *', async () => {
-    console.log('[SessionKeeper] Running keep-alive ping...');
+const PING_INTERVAL_MS = parseInt(process.env.SESSION_PING_INTERVAL_MS || String(10 * 60 * 1000)); // 10 min
+const MAX_FAILURES     = 3;
 
-    try {
-      const ok = await flowProxy.keepAlive();
+let _timer        = null;
+let _failureCount = 0;
 
-      if (ok) {
-        lastPingAt = new Date();
-        consecutiveFailures = 0;
-        console.log(`[SessionKeeper] ✅ Session alive at ${lastPingAt.toISOString()}`);
-      } else {
-        consecutiveFailures++;
-        console.warn(`[SessionKeeper] ⚠️ Ping failed (${consecutiveFailures}/${MAX_FAILURES})`);
-
-        if (consecutiveFailures >= MAX_FAILURES) {
-          console.error('[SessionKeeper] ❌ Too many failures — session may be broken');
-          // Could send alert/notification here in production
-        }
-      }
-    } catch (err) {
-      consecutiveFailures++;
-      console.error(`[SessionKeeper] Error: ${err.message}`);
+async function ping() {
+  console.log('[SessionKeeper] Running keep-alive ping...');
+  try {
+    const flowProxy = require('./flowProxy');
+    await flowProxy.keepAlive();
+    _failureCount = 0;
+    console.log(`[SessionKeeper] ✅ Session alive at ${new Date().toISOString()}`);
+  } catch (err) {
+    _failureCount++;
+    console.warn(`[SessionKeeper] ⚠️ Ping failed (${_failureCount}/${MAX_FAILURES}): ${err.message}`);
+    if (_failureCount >= MAX_FAILURES) {
+      sysLogger.error('sessionKeeper', 'Session keepalive failed repeatedly', {
+        failures: _failureCount,
+        error:    err.message,
+      });
     }
-  });
-
-  console.log('[SessionKeeper] Started — pinging Flow every 10 minutes');
-}
-
-function stop() {
-  if (cronTask) {
-    cronTask.destroy();
-    cronTask = null;
-    console.log('[SessionKeeper] Stopped');
   }
 }
 
-function getStatus() {
-  return {
-    running: !!cronTask,
-    lastPingAt: lastPingAt?.toISOString() || null,
-    consecutiveFailures,
-  };
+function start() {
+  if (_timer) return;
+  console.log('[SessionKeeper] Started — pinging Flow every 10 minutes');
+  _timer = setInterval(ping, PING_INTERVAL_MS);
 }
 
-module.exports = { start, stop, getStatus };
+function stop() {
+  if (_timer) {
+    clearInterval(_timer);
+    _timer = null;
+  }
+}
+
+module.exports = { start, stop, ping };

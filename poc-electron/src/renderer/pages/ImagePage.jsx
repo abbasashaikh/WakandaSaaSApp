@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
-import { generateImage, startPolling } from '../api'
+import { generateImage, startPolling, friendlyError, resolveMediaUrl } from '../api'
 
 // ── Aspect ratio config ───────────────────────────────────────
 // Maps the ratio string to a Tailwind aspect-ratio utility class.
@@ -153,9 +153,9 @@ function ErrorCanvas({ message, aspectRatio, onRetry }) {
 
 export default function ImagePage() {
   const navigate        = useNavigate()
-  const licenseKey      = useAppStore((s) => s.licenseKey)
   const addJob          = useAppStore((s) => s.addJob)
   const updateJobStore  = useAppStore((s) => s.updateJob)
+  const prependHistory  = useAppStore((s) => s.prependHistory)
 
   const [prompt,       setPrompt]       = useState('')
   const [aspectRatio,  setAspectRatio]  = useState('16:9')
@@ -177,36 +177,36 @@ export default function ImagePage() {
     setErrorMsg('')
 
     try {
-      const res   = await generateImage(licenseKey, { prompt: trimmed, aspect_ratio: aspectRatio })
+      const res   = await generateImage(trimmed, { aspect_ratio: aspectRatio })
       const jobId = res.job_id
       addJob({ job_id: jobId, type: 'image', status: 'queued', prompt: trimmed })
 
-      stopPollingRef.current = startPolling(licenseKey, jobId, (job) => {
-        updateJobStore(jobId, job)
-        if (job.status === 'completed' && job.output_url) {
+      stopPollingRef.current = startPolling(jobId, {
+        onProgress: (job) => {
+          updateJobStore(jobId, job)
+        },
+        onComplete: (job) => {
           setStatus('completed')
-          setOutputUrl(job.output_url)
+          setOutputUrl(resolveMediaUrl(job.output_url))
+          prependHistory({ ...job, prompt: trimmed })
           stopPollingRef.current?.()
-        } else if (job.status === 'failed') {
+        },
+        onError: (msg) => {
           setStatus('failed')
-          setErrorMsg(job.error || 'Generation failed. Please try again.')
+          setErrorMsg(msg)
           stopPollingRef.current?.()
-        }
+        },
       })
     } catch (err) {
       setStatus('failed')
-      setErrorMsg(
-        err?.response?.data?.message ||
-        err?.message ||
-        'Failed to start generation. Check that the backend is running.'
-      )
+      setErrorMsg(friendlyError(err?.message || 'Failed to start generation'))
     }
   }
 
   function handleDownload() {
     if (!outputUrl) return
     const a = document.createElement('a')
-    a.href     = outputUrl
+    a.href     = resolveMediaUrl(outputUrl)
     a.download = `yourbrand-image-${Date.now()}.jpg`
     a.target   = '_blank'
     a.click()

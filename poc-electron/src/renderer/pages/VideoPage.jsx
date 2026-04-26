@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
-import { generateVideo, startPolling } from '../api'
+import { generateVideo, startPolling, friendlyError, resolveMediaUrl } from '../api'
 
 // ── Sub-components ────────────────────────────────────────────
 
@@ -189,9 +189,9 @@ function ErrorCanvas({ message, onRetry }) {
 
 export default function VideoPage() {
   const navigate        = useNavigate()
-  const licenseKey      = useAppStore((s) => s.licenseKey)
   const addJob          = useAppStore((s) => s.addJob)
   const updateJobStore  = useAppStore((s) => s.updateJob)
+  const prependHistory  = useAppStore((s) => s.prependHistory)
 
   const [prompt,    setPrompt]    = useState('')
   const [duration,  setDuration]  = useState(8)
@@ -221,23 +221,28 @@ export default function VideoPage() {
     timerRef.current = setInterval(() => setElapsed(prev => prev + 1), 1000)
 
     try {
-      const res   = await generateVideo(licenseKey, { prompt: trimmed, duration, quality })
+      const res   = await generateVideo(trimmed, { duration, quality })
       const jobId = res.job_id
       addJob({ job_id: jobId, type: 'video', status: 'queued', prompt: trimmed })
 
-      stopPollingRef.current = startPolling(licenseKey, jobId, (job) => {
-        updateJobStore(jobId, job)
-        if (job.status === 'completed' && job.output_url) {
-          clearInterval(timerRef.current)
+      stopPollingRef.current = startPolling(jobId, {
+        onProgress: (job) => {
+          updateJobStore(jobId, job)
+          if (job.status === 'processing' || job.status === 'queued') {
+            setElapsed(e => e + 3)
+          }
+        },
+        onComplete: (job) => {
           setStatus('completed')
-          setOutputUrl(job.output_url)
+          setOutputUrl(resolveMediaUrl(job.output_url))
+          prependHistory({ ...job, prompt: trimmed })
           stopPollingRef.current?.()
-        } else if (job.status === 'failed') {
-          clearInterval(timerRef.current)
+        },
+        onError: (msg) => {
           setStatus('failed')
-          setErrorMsg(job.error || 'Generation failed. Please try again.')
+          setErrorMsg(msg)
           stopPollingRef.current?.()
-        }
+        },
       })
     } catch (err) {
       clearInterval(timerRef.current)
@@ -258,7 +263,7 @@ export default function VideoPage() {
     if (!outputUrl) return
     try {
       // Fetch as blob so Electron saves the file instead of opening in browser
-      const resp = await fetch(outputUrl)
+      const resp = await fetch(resolveMediaUrl(outputUrl))
       const blob = await resp.blob()
       const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -269,7 +274,7 @@ export default function VideoPage() {
     } catch {
       // Fallback: open directly
       const a = document.createElement('a')
-      a.href     = outputUrl
+      a.href     = resolveMediaUrl(outputUrl)
       a.download = `yourbrand-video-${Date.now()}.mp4`
       a.target   = '_blank'
       a.click()

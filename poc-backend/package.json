@@ -1,7 +1,7 @@
 {
   "name": "poc-ai-creative-studio-backend",
-  "version": "2.0.0",
-  "description": "AI Creative Studio POC Backend — Phase 2",
+  "version": "4.0.0",
+  "description": "AI Creative Studio POC Backend \u2014 Phase 4 (media persistence)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,7 +9,9 @@
     "capture:session": "node scripts/captureSession.js",
     "capture:video": "node scripts/captureVideoFull.js",
     "test:phase1": "node tests/phase1.test.js",
-    "test:phase2": "node tests/phase2.test.js"
+    "test:phase2": "node tests/phase2.test.js",
+    "test:phase3": "node tests/phase3.test.js",
+    "test:all": "node tests/phase1.test.js && node tests/phase2.test.js && node tests/phase3.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",

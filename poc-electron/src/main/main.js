@@ -65,3 +65,26 @@ app.on('activate', () => {
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url)
 })
+
+ipcMain.on('set-title', (event, title) => {
+  mainWindow?.setTitle(title)
+})
+
+// ── Secure in-memory token storage (Phase 5) ────────────────────────────────
+// Tokens are never written to disk — stored only in main process memory.
+// The renderer requests them via IPC; it cannot access them directly.
+let _tokens = null  // { accessToken, refreshToken, expiresAt }
+
+ipcMain.handle('auth:save-tokens', (event, tokens) => {
+  _tokens = tokens
+  return true
+})
+
+ipcMain.handle('auth:get-tokens', () => {
+  return _tokens
+})
+
+ipcMain.handle('auth:clear-tokens', () => {
+  _tokens = null
+  return true
+})

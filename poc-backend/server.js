@@ -45,14 +45,44 @@ app.use('/api/admin',     adminRoutes);     // /api/admin/* (requires admin role
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
+  const mediaCache  = require('./services/mediaCache');
+  const flowProxy   = require('./services/flowProxy');
+  const cacheStats  = mediaCache.getCacheStats();
+  const poolStatus  = (() => { try { return flowProxy.getPoolStatus(); } catch { return null; } })();
+  const credits     = (() => { try { return flowProxy.getCredits();    } catch { return null; } })();
   res.json({
-    status:    'ok',
-    version:   '2.0.0-phase2',
-    mode:      process.env.FLOW_MODE || 'mock',
-    timestamp: new Date().toISOString(),
-    uptime:    Math.floor(process.uptime()),
+    status:       'ok',
+    version:      '4.1.0',
+    mode:         process.env.HEADLESS === 'false' ? 'headed' : 'headless',
+    timestamp:    new Date().toISOString(),
+    uptime:       Math.floor(process.uptime()),
+    media_cache:  cacheStats,
+    browser_pool: poolStatus,
+    credits,
   });
 });
+
+// ── Mock assets — served in MOCK mode (FLOW_MODE=mock) ──────────────────────────
+// Files live in /public/mock-images/ and /public/mock-videos/
+// URL path is /mock-assets/mock-images/ and /mock-assets/mock-videos/
+app.use('/mock-assets', express.static(path.join(__dirname, 'public'), {
+  maxAge: '1d',
+  etag:   true,
+}));
+
+// ── Media files (Phase 4) — must be BEFORE the 404 handler ─────────────────────
+// Serves /public/media/* as /media/* (cached generated images & videos)
+app.use('/media', express.static(path.join(__dirname, 'public', 'media'), {
+  maxAge: '7d',
+  etag:    true,
+  setHeaders: (res, filePath) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (filePath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+  },
+}));
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -104,6 +134,11 @@ async function start() {
     pruneExpiredTokens();
     setInterval(pruneExpiredTokens, 60 * 60 * 1000);
   }
+
+  // Prune expired media files (older than 7 days) at startup and daily
+  const mediaCache = require('./services/mediaCache');
+  mediaCache.pruneOldMedia();
+  setInterval(() => mediaCache.pruneOldMedia(), 24 * 60 * 60 * 1000);
 
   // Init browser (non-blocking for mock mode)
   try {

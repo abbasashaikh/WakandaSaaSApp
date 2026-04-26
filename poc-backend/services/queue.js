@@ -117,15 +117,22 @@ function startWorker() {
         throw genErr; // rethrow so BullMQ handles retry
       }
 
+      // Phase 4: Persist media to local cache (CDN URLs expire in ~20 min)
+      const mediaCache = require('./mediaCache');
+      const localUrl   = await mediaCache.persist(result.output_url, jobId, type);
+      if (localUrl !== result.output_url) {
+        console.log(`[Worker] Media cached: ${result.output_url?.slice(0,60)} → ${localUrl}`);
+      }
+
       // Success
       updateJob(jobId, {
         status:     'completed',
-        output_url: result.output_url,
+        output_url: localUrl,
         metadata:   JSON.stringify(result.metadata || {}),
       });
 
-      log.gen.info('Generation completed', { jobId, type, url: result.output_url?.slice(0, 60) });
-      console.log(`[Worker] Job ${jobId} completed → ${result.output_url}`);
+      log.gen.info('Generation completed', { jobId, type, url: localUrl?.slice(0, 60) });
+      console.log(`[Worker] Job ${jobId} completed → ${localUrl}`);
 
       logAuditEvent({
         eventType: 'generation.completed',

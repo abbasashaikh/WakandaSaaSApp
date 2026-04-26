@@ -51,19 +51,32 @@ router.get('/:id', (req, res) => {
 });
 
 // GET /api/jobs — List recent jobs for the current user
+// Query params: ?limit=20&type=image|video&status=completed|failed|queued|processing
 router.get('/', (req, res) => {
-  const jobs = getJobsByUser(req.user.id, 20);
+  const limit  = Math.min(parseInt(req.query.limit  || '20', 10), 100);
+  const jobs   = getJobsByUser(req.user.id, limit);
+
+  // Optional client-side filters
+  const { type, status } = req.query;
+  const filtered = jobs.filter(j =>
+    (!type   || j.type   === type)   &&
+    (!status || j.status === status)
+  );
 
   return res.json({
-    jobs: jobs.map(job => ({
+    jobs: filtered.map(job => ({
       job_id:     job.id,
       type:       job.type,
       status:     job.status,
-      prompt:     job.prompt.slice(0, 80) + (job.prompt.length > 80 ? '...' : ''),
+      prompt:     job.prompt,
       output_url: job.output_url || null,
+      error:      job.error      || null,
       created_at: job.created_at,
+      updated_at: job.updated_at,
     })),
-    count: jobs.length,
+    count:  filtered.length,
+    total:  jobs.length,
+    limit,
   });
 });
 
