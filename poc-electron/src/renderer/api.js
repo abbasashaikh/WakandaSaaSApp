@@ -6,7 +6,47 @@ const BASE = (import.meta.env?.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api$/, '') + '/api'
   : 'http://localhost:3001/api')
 
+
 const MEDIA_BASE = 'http://localhost:3001'
+// ── URL resolution ────────────────────────────────────────────────────────────
+// Derive both BASE (API calls) and MEDIA_BASE (media files) from the same env var.
+// This ensures testers pointing to Codespace URL get media from the same host.
+
+function _buildBaseUrl() {
+  const raw = import.meta.env?.VITE_API_URL || ''
+
+  if (!raw) {
+    // No env var set — fall back to localhost (local dev)
+    return { BASE: 'http://localhost:3001/api', MEDIA_BASE: 'http://localhost:3001' }
+  }
+
+  // Strip any trailing slash and any trailing /api
+  const clean = raw.replace(/\/+$/, '').replace(/\/api$/, '')
+
+  return {
+    BASE:       `${clean}/api`,
+    MEDIA_BASE: clean,
+  }
+}
+
+const { BASE, MEDIA_BASE } = _buildBaseUrl()
+
+// ── Platform identifier ──────────────────────────────────────────────────────
+// Sent with every request so the backend can track which app is calling.
+// Windows Electron app always sends 'windows'.
+// Android app sends 'android' (defined in android/src/api.js).
+// This header is logged per-request and stored on each job record.
+const PLATFORM = 'windows'
+
+// ── Bypass headers ────────────────────────────────────────────────────────────
+// Required for both ngrok tunnels and GitHub Codespace URLs.
+// Without these, both services show an interstitial HTML page instead of JSON.
+const BYPASS_HEADERS = {
+  'ngrok-skip-browser-warning': 'true',
+  'x-github-token':             'bypass',
+  'x-platform':                 PLATFORM,
+}
+
 
 // ── Phase 6: User-friendly error mapping ─────────────────────────────────────
 const ERROR_MAP = [

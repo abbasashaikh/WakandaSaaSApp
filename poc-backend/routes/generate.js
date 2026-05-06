@@ -38,7 +38,7 @@ router.post(
 
     const jobId = uuidv4();
 
-    createJob(jobId, userId, 'image', prompt.trim(), correlationId);
+    createJob(jobId, userId, 'image', prompt.trim(), correlationId, req.platform || 'unknown');
 
     try {
       await enqueueJob({
@@ -106,7 +106,7 @@ router.post(
 
     const jobId = uuidv4();
 
-    createJob(jobId, userId, 'video', prompt.trim(), correlationId);
+    createJob(jobId, userId, 'video', prompt.trim(), correlationId, req.platform || 'unknown');
 
     try {
       await enqueueJob({

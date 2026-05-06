@@ -67,6 +67,7 @@ function initSchema() {
       metadata         TEXT    DEFAULT '{}',
       attempt_count    INTEGER NOT NULL DEFAULT 0,
       correlation_id   TEXT,
+      platform         TEXT    NOT NULL DEFAULT 'unknown',
       created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(user_id) REFERENCES poc_users(id)
@@ -205,13 +206,13 @@ function setUserActive(userId, isActive) {
 
 // ── Job queries ───────────────────────────────────────────────────────────────
 
-function createJob(jobId, userId, type, prompt, correlationId = null) {
+function createJob(jobId, userId, type, prompt, correlationId = null, platform = 'unknown') {
   getDb()
     .prepare(`
-      INSERT INTO poc_jobs (id, user_id, type, prompt, status, correlation_id)
-      VALUES (?, ?, ?, ?, 'queued', ?)
+      INSERT INTO poc_jobs (id, user_id, type, prompt, status, correlation_id, platform)
+      VALUES (?, ?, ?, ?, 'queued', ?, ?)
     `)
-    .run(jobId, userId, type, prompt, correlationId);
+    .run(jobId, userId, type, prompt, correlationId, platform);
 }
 
 /**

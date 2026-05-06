@@ -19,6 +19,9 @@ const MOCK_VIDEOS = [1,2,3].map(n => `${SELF}/mock-assets/mock-videos/video${n}.
 // ── Phase 3: Browser pool ────────────────────────────────────────────────────
 const browserPool = require('./browserPool');
 
+// ── Logger (must be before creditMonitor which uses sysLogger) ────────────────
+const { sysLogger } = require('../middleware/logger');
+
 // ── Credit monitor ────────────────────────────────────────────────────────────
 // Tracks remaining Google Flow credits across all generation responses.
 // Logs warnings at thresholds; pauses queue when critically low.
@@ -942,6 +945,46 @@ async function browserGenerateVideo(prompt, options = {}) {
     }).catch(()=>({videoActive:false, pillText:'eval error'}));
 
     console.log(`[FlowProxy:BROWSER] Mode confirm: videoActive=${vidModeConfirm.videoActive} pill="${vidModeConfirm.pillText}"`);
+
+    // ── Bug fix: Google sometimes shows "swap" sub-mode after clicking Video ──
+    // If we ended up in swap mode, try clicking the pill again to cycle back
+    // to the standard video generation mode.
+    const pillLow = (vidModeConfirm.pillText || '').toLowerCase();
+    if (!vidModeConfirm.videoActive && (pillLow.includes('swap') || pillLow.includes('horiz'))) {
+      console.warn('[FlowProxy:BROWSER] ⚠️ Landed in swap mode — clicking pill to cycle to video mode');
+      try {
+        // Click the pill to open the selector again
+        if (vidModeDetect.coords) {
+          await genPage.mouse.click(vidModeDetect.coords.x, vidModeDetect.coords.y);
+          await sleep(700);
+        }
+        // Now look for any button with "video" text that is NOT swap
+        const videoGenBtn = await genPage.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+          for (const b of btns) {
+            const txt = (b.innerText || b.textContent || '').toLowerCase();
+            if (txt.includes('video') && !txt.includes('swap') && !txt.includes('scenebuilder')) {
+              const r = b.getBoundingClientRect();
+              if (r.width > 20 && r.height > 20) {
+                return { x: r.x + r.width/2, y: r.y + r.height/2, text: txt.slice(0, 40) };
+              }
+            }
+          }
+          return null;
+        });
+        if (videoGenBtn) {
+          await genPage.mouse.click(videoGenBtn.x, videoGenBtn.y);
+          console.log(`[FlowProxy:BROWSER] Clicked video button: "${videoGenBtn.text}"`);
+          await sleep(1500);
+        }
+      } catch (e) {
+        console.warn('[FlowProxy:BROWSER] Swap mode recovery failed:', e.message);
+      }
+    }
+
+    // ── Proceed regardless of strict videoActive check ─────────────────────────
+    // Even if mode confirm is uncertain, attempt generation — the interceptor
+    // will catch the API call. If truly wrong mode, Google returns no video job.
 
         // ─────────────────────────────────────────────────────────────────────────
     // Step 5: Type the prompt

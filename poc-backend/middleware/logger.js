@@ -77,6 +77,22 @@ function correlationMiddleware(req, res, next) {
   req.correlationId = req.headers['x-correlation-id'] || crypto.randomUUID();
   res.setHeader('x-correlation-id', req.correlationId);
 
+  // ── Platform detection ─────────────────────────────────────────────────────
+  // Clients send X-Platform header to identify themselves.
+  // Values: 'windows' | 'android' | 'ios' | 'web' | 'unknown'
+  // Falls back to User-Agent sniffing if header is absent (e.g. old clients).
+  const platformHeader = req.headers['x-platform'];
+  if (platformHeader) {
+    req.platform = platformHeader.toLowerCase().trim();
+  } else {
+    const ua = req.headers['user-agent'] || '';
+    if (/android/i.test(ua))          req.platform = 'android';
+    else if (/electron/i.test(ua))    req.platform = 'windows';
+    else if (/iphone|ipad/i.test(ua)) req.platform = 'ios';
+    else if (ua)                       req.platform = 'web';
+    else                               req.platform = 'unknown';
+  }
+
   // Create request-scoped logger
   req.log = makeRequestLogger(req.correlationId);
 
@@ -88,6 +104,7 @@ function correlationMiddleware(req, res, next) {
       status:   res.statusCode,
       ms,
       userId:   req.user?.id,
+      platform: req.platform,
       ip:       req.ip,
     });
   });

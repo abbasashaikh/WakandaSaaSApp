@@ -27,8 +27,17 @@ const app  = express();
 app.use(cors({
   origin:         '*',
   methods:        ['GET', 'POST', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'X-License-Key', 'Authorization', 'X-Correlation-ID'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-License-Key',
+    'X-Correlation-ID',
+    'X-Platform',                  // platform flag (windows/android/web)
+    'ngrok-skip-browser-warning',  // bypass ngrok interstitial page
+    'x-github-token',              // bypass GitHub Codespace auth wall
+  ],
   exposedHeaders: ['X-Correlation-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'Retry-After'],
+  optionsSuccessStatus: 200,       // some browsers (IE11) choke on 204
 }));
 
 app.use(express.json({ limit: '1mb' }));
@@ -45,33 +54,22 @@ app.use('/api/admin',     adminRoutes);     // /api/admin/* (requires admin role
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  const mediaCache  = require('./services/mediaCache');
-  const flowProxy   = require('./services/flowProxy');
-  const cacheStats  = mediaCache.getCacheStats();
-  const poolStatus  = (() => { try { return flowProxy.getPoolStatus(); } catch { return null; } })();
-  const credits     = (() => { try { return flowProxy.getCredits();    } catch { return null; } })();
+  const mediaCache = require('./services/mediaCache');
+  const { getPoolStatus } = require('./services/flowProxy');
+  const cacheStats = mediaCache.getCacheStats();
   res.json({
-    status:       'ok',
-    version:      '4.1.0',
-    mode:         process.env.HEADLESS === 'false' ? 'headed' : 'headless',
-    timestamp:    new Date().toISOString(),
-    uptime:       Math.floor(process.uptime()),
-    media_cache:  cacheStats,
-    browser_pool: poolStatus,
-    credits,
+    status:    'ok',
+    version:   '2.0.0-phase4',
+    mode:      process.env.FLOW_MODE || 'browser',
+    timestamp: new Date().toISOString(),
+    uptime:    Math.floor(process.uptime()),
+    media_cache: cacheStats,
+    browser_pool: (() => { try { return getPoolStatus(); } catch { return null; } })(),
   });
 });
 
-// ── Mock assets — served in MOCK mode (FLOW_MODE=mock) ──────────────────────────
-// Files live in /public/mock-images/ and /public/mock-videos/
-// URL path is /mock-assets/mock-images/ and /mock-assets/mock-videos/
-app.use('/mock-assets', express.static(path.join(__dirname, 'public'), {
-  maxAge: '1d',
-  etag:   true,
-}));
-
-// ── Media files (Phase 4) — must be BEFORE the 404 handler ─────────────────────
-// Serves /public/media/* as /media/* (cached generated images & videos)
+// ── Static file routes — MUST be before the 404 handler ────────────────────────
+// /media serves generated images and videos (Phase 4 media cache)
 app.use('/media', express.static(path.join(__dirname, 'public', 'media'), {
   maxAge: '7d',
   etag:    true,
@@ -82,6 +80,12 @@ app.use('/media', express.static(path.join(__dirname, 'public', 'media'), {
       res.setHeader('Accept-Ranges', 'bytes');
     }
   },
+}));
+
+// /mock-assets serves mock images/videos used in FLOW_MODE=mock
+app.use('/mock-assets', express.static(path.join(__dirname, 'public'), {
+  maxAge: '1d',
+  etag:   true,
 }));
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
@@ -125,6 +129,7 @@ async function start() {
   console.log(`  Redis:   ${process.env.REDIS_URL || 'redis://localhost:6379'}`);
   console.log(`  Auth:    JWT (HS256) + X-License-Key (legacy compat)`);
   console.log('');
+
 
   // Seed test user + schema migration
   seedTestUser();
