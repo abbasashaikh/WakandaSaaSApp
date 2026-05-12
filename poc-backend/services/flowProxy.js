@@ -2,7 +2,9 @@
 // Image: intercept batchGenerateImages (working ✅)
 // Video: intercept batchGenerateVideos using page.evaluate direct API call
 //        from GALLERY page (stable context, not project page)
-require('dotenv').config();
+//require('dotenv').config();
+// NEW — force override of any existing env vars
+require('dotenv').config({ override: true });
 
 const FLOW_MODE           = (process.env.FLOW_MODE || 'mock').toLowerCase();
 const FLOW_SESSION_COOKIE = process.env.FLOW_SESSION_COOKIE || '';
@@ -250,6 +252,26 @@ try {
     });
     await warmPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     console.log('[FlowProxy:BROWSER] ✅ Warm page initialized on labs.google');
+
+    // ── COOKIE SYNC FIX ────────────────────────────────────────────────────
+    // NextAuth rotates session tokens on first use. bContext now holds the
+    // fresh rotated token after visiting /api/auth/session + warm page load.
+    // Pool contexts created later must use this rotated token — the original
+    // .env value is already invalidated by Google at this point.
+    // Sync ALL cookies from bContext → pool so generation contexts have the
+    // correct token and don't get redirected to Google login on navigation.
+    try {
+      //const freshCookies = await bContext.cookies(['https://labs.google']);
+      const freshCookies = await bContext.cookies(); // ALL domains — includes Google auth cookies
+      if (freshCookies && freshCookies.length > 0) {
+        browserPool.updateCookies(freshCookies);
+        console.log(`[FlowProxy:BROWSER] ✅ Pool cookies synced (${freshCookies.length} cookies)`);
+      }
+    } catch (syncErr) {
+      console.warn('[FlowProxy:BROWSER] Cookie sync warning (non-fatal):', syncErr.message);
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
   } catch (err) {
     console.warn('[FlowProxy:BROWSER] Warm page init failed (non-fatal):', err.message);
   }

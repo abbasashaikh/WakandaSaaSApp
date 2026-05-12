@@ -29,7 +29,7 @@ function _buildBaseUrl() {
   }
 }
 
-const { BASE, MEDIA_BASE } = _buildBaseUrl()
+//const { BASE, MEDIA_BASE } = _buildBaseUrl()
 
 // ── Platform identifier ──────────────────────────────────────────────────────
 // Sent with every request so the backend can track which app is calling.

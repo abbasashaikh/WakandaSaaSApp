@@ -76,6 +76,11 @@ async function capture() {
   try { envContent = fs.readFileSync(ENV_PATH, 'utf8'); } catch {}
 
   // Update or add FLOW_SESSION_COOKIE
+ envContent = envContent.replace(
+  /^FLOW_SESSION_COOKIE=.*/m,
+  `FLOW_SESSION_COOKIE=${cookie}`
+);
+
   if (envContent.includes('FLOW_SESSION_COOKIE=')) {
     envContent = envContent.replace(
       /FLOW_SESSION_COOKIE=.*/,

@@ -103,7 +103,7 @@ function ResultCanvas({ url, aspectRatio, onDownload }) {
       <img
         src={url}
         alt="Generated"
-        className="absolute inset-0 w-full h-full object-cover rounded-2xl animate-fade-in"
+        className="absolute inset-0 w-full h-full object-cover rounded-2xl"
       />
       {/* Download button overlay — bottom centre */}
       <div className="absolute bottom-3 left-0 right-0 flex justify-center">

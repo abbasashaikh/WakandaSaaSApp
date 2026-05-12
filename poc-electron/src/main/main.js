@@ -11,7 +11,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'YourBrand App',
+    title: 'NovaCraft',
     backgroundColor: '#0a0a0f',
     show: false,
     frame: true,

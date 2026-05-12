@@ -25,6 +25,15 @@
 //   - If all slots are taken, the job waits in queue (backpressure)
 //   - Pool size = BROWSER_POOL_SIZE env var (default: 2)
 //
+// COOKIE SYNC FIX (v2):
+//   NextAuth rotates session tokens on first use. The bContext in flowProxy
+//   gets the fresh rotated token after visiting /api/auth/session and loading
+//   the warm page. Pool contexts created later still have the OLD invalidated
+//   token — causing immediate redirect to Google login on gallery navigation.
+//   FIX: flowProxy calls browserPool.updateCookies(freshCookies) after warm
+//   page loads. createIsolatedContext() then uses these fresh cookies instead
+//   of the original FLOW_SESSION_COOKIE value from .env.
+//
 // HEALTH MONITORING:
 //   - Tracks active slots, waiting jobs, context creation failures
 //   - Detects context leaks (slot acquired but never released)
@@ -42,6 +51,26 @@ const SLOT_LEASE_MAX   = parseInt(process.env.POOL_SLOT_LEASE_MS || '600000');  
 let browser        = null; // shared browser process
 let poolReady      = false;
 let poolInitializing = false;
+
+// ── COOKIE SYNC FIX ───────────────────────────────────────────────────────────
+// Holds the full set of fresh cookies from bContext after warm page load.
+// NextAuth rotates the session token on first use — the original .env value
+// is immediately invalidated. These fresh cookies are set by flowProxy calling
+// updateCookies() after the warm page is initialized.
+let _freshCookies = null;
+
+/**
+ * Called by flowProxy after warm page loads.
+ * Stores the full set of cookies from bContext (includes rotated session token).
+ * All subsequent pool context creations use these fresh cookies.
+ *
+ * @param {Array} cookies - Array of Playwright cookie objects from bContext.cookies()
+ */
+function updateCookies(cookies) {
+  if (!cookies || cookies.length === 0) return;
+  _freshCookies = cookies;
+  sysLogger.info('browserPool', 'Cookies synced from bContext', { count: cookies.length });
+}
 
 // Each slot: { id, context, acquiredAt, jobId, userId, released }
 const slots    = new Array(POOL_SIZE).fill(null).map((_, i) => ({
@@ -110,15 +139,29 @@ async function createIsolatedContext(sessionCookie) {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   });
 
-  // Inject session cookie into this context's isolated jar
-  if (sessionCookie && sessionCookie.length > 100) {
+  // ── COOKIE SYNC FIX ────────────────────────────────────────────────────────
+  // Prefer fresh rotated cookies from bContext (set via updateCookies()).
+  // NextAuth invalidates the original token after first use — pool contexts
+  // must use the rotated token or Google redirects to login immediately.
+  if (_freshCookies && _freshCookies.length > 0) {
+    // Use all fresh cookies from bContext — includes rotated session token
+    // and any other cookies Google set during the warm page load.
+    await ctx.addCookies(_freshCookies);
+    sysLogger.info('browserPool', 'Context created with fresh rotated cookies', {
+      cookieCount: _freshCookies.length,
+    });
+  } else if (sessionCookie && sessionCookie.length > 100) {
+    // Fallback: original session token from .env (may already be rotated/invalid)
+    // This path is taken only if updateCookies() was never called.
     await ctx.addCookies([
       { name: '__Secure-next-auth.session-token', value: sessionCookie,
         domain: 'labs.google', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
       { name: 'next-auth.session-token', value: sessionCookie,
         domain: 'labs.google', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
     ]);
+    sysLogger.warn('browserPool', 'Context created with original .env cookie (no fresh cookies available)', {});
   }
+  // ──────────────────────────────────────────────────────────────────────────
 
   return ctx;
 }
@@ -316,6 +359,7 @@ function getPoolStatus() {
     freeSlots:   slots.filter(s => !s.acquiredAt).length,
     queueDepth:  waitQueue.length,
     queuedJobs:  waitQueue.map(w => ({ jobId: w.jobId, userId: w.userId })),
+    freshCookies: _freshCookies ? _freshCookies.length : 0, // for debugging
   };
 }
 
@@ -343,6 +387,7 @@ async function destroyPool() {
   }
 
   poolReady = false;
+  _freshCookies = null; // clear synced cookies on destroy
   sysLogger.info('browserPool', 'Pool destroyed');
 }
 
@@ -351,4 +396,5 @@ module.exports = {
   acquire,
   getPoolStatus,
   destroyPool,
+  updateCookies,  // ← NEW: called by flowProxy after warm page loads
 };
