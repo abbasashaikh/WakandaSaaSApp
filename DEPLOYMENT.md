@@ -1,7 +1,7 @@
 # POC AI Creative Studio — Complete Deployment Guide
 
 > For new developers setting up the project from scratch.  
-> Covers: Backend · Electron (Windows) · Android  
+> Covers: Backend · Electron (Windows) · Android Dev · Android Release APK  
 > Last updated: May 2026
 
 ---
@@ -13,12 +13,14 @@
 3. [Project Structure](#3-project-structure)
 4. [Backend Setup](#4-backend-setup)
 5. [Electron App Setup](#5-electron-app-setup)
-6. [Android App Setup](#6-android-app-setup)
-7. [Google Flow Session Setup](#7-google-flow-session-setup)
-8. [Environment Variables Reference](#8-environment-variables-reference)
-9. [Daily Startup Workflow](#9-daily-startup-workflow)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Maintenance](#11-maintenance)
+6. [Android App Setup — Development](#6-android-app-setup--development)
+7. [Android Release APK Build](#7-android-release-apk-build)
+8. [Electron Production Build (.exe)](#8-electron-production-build-exe)
+9. [Google Flow Session Setup](#9-google-flow-session-setup)
+10. [Environment Variables Reference](#10-environment-variables-reference)
+11. [Daily Startup Workflow](#11-daily-startup-workflow)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Maintenance](#13-maintenance)
 
 ---
 
@@ -51,6 +53,7 @@
 - Playwright automates a real Chrome browser — it is NOT an API call.
 - Session cookie expires every ~7 days and must be recaptured manually.
 - Android connects to the backend via ngrok tunnel (phone cannot reach localhost directly).
+- The release APK is a standalone installer — does not need Metro or a PC once built.
 
 ---
 
@@ -65,8 +68,9 @@
 | Google Chrome | Latest | https://google.com/chrome |
 | Redis | 6.2+ | https://github.com/microsoftarchive/redis/releases |
 | Android Studio | Latest | https://developer.android.com/studio |
-| ngrok | Latest | https://ngrok.com/download |
 | Java JDK | 17 | https://adoptium.net |
+| ngrok | Latest | https://ngrok.com/download |
+| 7-Zip | Latest | https://www.7-zip.org (needed for Electron build) |
 
 ### Verify everything is installed
 
@@ -94,7 +98,6 @@ After installing Android Studio:
 Set environment variables (PowerShell as Administrator):
 
 ```powershell
-# Replace C:\Users\YourName with your actual username
 [System.Environment]::SetEnvironmentVariable("ANDROID_HOME", "$env:LOCALAPPDATA\Android\Sdk", "User")
 [System.Environment]::SetEnvironmentVariable("Path", "$env:Path;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPDATA\Android\Sdk\emulator", "User")
 ```
@@ -115,6 +118,7 @@ poc-ai-creative-studio/
 │   ├── .env                  ← Environment config (never commit this)
 │   ├── server.js             ← Entry point
 │   ├── poc.db                ← SQLite database (auto-created)
+│   ├── fix.js                ← Clears stuck jobs
 │   ├── routes/
 │   │   └── generate.js       ← Image/video generation endpoints
 │   ├── services/
@@ -124,8 +128,7 @@ poc-ai-creative-studio/
 │   ├── middleware/
 │   │   └── rateLimiter.js    ← Per-user rate limiting
 │   └── scripts/
-│       ├── captureSession.js ← Captures Google session cookie
-│       └── clearStaleJobs.js ← Clears stuck jobs from DB
+│       └── captureSession.js ← Captures Google session cookie
 │
 ├── poc-electron/             ← Windows desktop app
 │   ├── src/
@@ -138,6 +141,11 @@ poc-ai-creative-studio/
 │   └── package.json
 │
 └── poc-android/              ← Android app (React Native)
+    ├── android/
+    │   ├── app/
+    │   │   ├── build.gradle          ← Signing config lives here
+    │   │   └── my-release-key.keystore  ← Generated once, never commit
+    │   └── gradle.properties         ← Keystore credentials
     ├── src/
     │   ├── screens/
     │   │   └── VideoGenerationScreen.js
@@ -172,23 +180,24 @@ NODE_ENV=production
 HEADLESS=true
 
 # ── Google Flow session cookie ────────────────────────────────────────────────
-# Run: npm run capture:session   to get this value (see Section 7)
+# Run: npm run capture:session   to get this value (see Section 9)
 # Expires every ~7 days — re-capture when session stops working
+# CRITICAL: Only ONE line with FLOW_SESSION_COOKIE= — no commented copies
 FLOW_SESSION_COOKIE=REPLACE_THIS_AFTER_CAPTURE
 
 # ── Redis ─────────────────────────────────────────────────────────────────────
 REDIS_URL=redis://127.0.0.1:6379
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
-# Generate a real secret: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=CHANGE_ME_generate_a_real_random_string_here
 ACCESS_TOKEN_TTL_SEC=3600
 REFRESH_TOKEN_TTL_SEC=604800
 
 # ── Browser pool ──────────────────────────────────────────────────────────────
-# Each slot uses ~400MB RAM. Adjust based on your machine:
-#   4GB RAM  → 1 or 2
-#   8GB RAM  → 2 or 4
+# Each slot uses ~400MB RAM
+#   4GB RAM  → BROWSER_POOL_SIZE=2
+#   8GB RAM  → BROWSER_POOL_SIZE=4
 BROWSER_POOL_SIZE=2
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -204,29 +213,25 @@ CREDIT_CRITICAL_THRESHOLD=50
 DB_PATH=./poc.db
 ```
 
-> **IMPORTANT:** The `FLOW_SESSION_COOKIE` value is required to start. Complete Section 7 first to get it.
+> **IMPORTANT:** The `FLOW_SESSION_COOKIE` value is required to start. Complete Section 9 first to get it.
 
 ### Step 3 — Start Redis
-
-Redis must be running before the backend:
 
 ```powershell
 # Open a dedicated PowerShell window for Redis
 redis-server
 ```
 
-You should see: `Ready to accept connections`
-
-Keep this window open. Do not close it.
+You should see: `Ready to accept connections`. Keep this window open.
 
 ### Step 4 — Capture Google session (first time)
 
-See **Section 7** for full instructions. Quick steps:
+See **Section 9** for full instructions. Quick steps:
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-backend"
 npm run capture:session
-# A Chrome window will open — log in with your Google account
+# A Chrome window opens — log in with your Google account
 # Script auto-captures the cookie and updates .env
 ```
 
@@ -237,7 +242,7 @@ cd "C:\App Development\poc-ai-creative-studio\poc-backend"
 npm start
 ```
 
-**Wait for ALL these lines to appear before using the app:**
+**Wait for ALL these lines before using the app:**
 
 ```
 ✅ Stealth mode enabled
@@ -249,12 +254,9 @@ Worker started
 ✅ Server running at http://localhost:3001
 ```
 
-If you see `veoanti69703551@anna37.sbs` as the session email instead of your Gmail, stop the server and re-read Section 7 (session capture issue).
-
 ### Step 6 — Verify backend is working
 
 ```powershell
-# In a new PowerShell window:
 Invoke-WebRequest http://localhost:3001/health | Select-Object -ExpandProperty Content
 # Should return: {"status":"ok"}
 ```
@@ -263,106 +265,66 @@ Invoke-WebRequest http://localhost:3001/health | Select-Object -ExpandProperty C
 
 ## 5. Electron App Setup
 
-### Step 1 — Install dependencies
+### Development (run locally)
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-electron"
 npm install
-```
-
-### Step 2 — Start the app (development)
-
-The backend MUST be running first (Section 4).
-
-```powershell
-cd "C:\App Development\poc-ai-creative-studio\poc-electron"
 npm start
 ```
 
-The Electron window will open. It connects to `http://localhost:3001` automatically.
+The Electron window opens and connects to `http://localhost:3001` automatically.
 
-### Step 3 — Login
+Login with test key: `poc-test-key-12345678`
 
-Use the test key: `poc-test-key-12345678`
-
-Or the real key if configured in the backend database.
-
-### Step 4 — Build for production (optional)
-
-```powershell
-cd "C:\App Development\poc-ai-creative-studio\poc-electron"
-npm run build
-```
-
-Output: `poc-electron/dist/` — contains the distributable `.exe` installer.
+See **Section 8** for building the production `.exe` installer.
 
 ---
 
-## 6. Android App Setup
+## 6. Android App Setup — Development
 
-> The Android app connects to the backend via ngrok because the phone cannot reach `localhost` on your PC.
+> Development mode requires Metro bundler running on your PC. Use this for testing/coding. For distribution to testers, see **Section 7 (Release APK)**.
 
 ### Step 1 — Install dependencies
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-android"
 npm install
-```
-
-### Step 2 — Install react-native-image-picker
-
-This package is required for the start/end frame upload feature:
-
-```powershell
-cd "C:\App Development\poc-ai-creative-studio\poc-android"
 npm install react-native-image-picker
 ```
 
-### Step 3 — Start ngrok (new terminal)
+### Step 2 — Start ngrok (new terminal)
 
 ```powershell
 ngrok http 3001
 ```
 
-You will see output like:
+Copy the `https://abc123.ngrok-free.app` URL — needed in Step 6.
 
-```
-Forwarding  https://abc123.ngrok-free.app -> http://localhost:3001
-```
+### Step 3 — Connect your phone
 
-Copy the `https://` URL — you will need it in Step 7.
+**Physical phone (recommended):**
 
-Keep this window open while using the Android app.
-
-### Step 4 — Connect your phone
-
-**Option A — Physical phone (recommended):**
-
-1. On your phone: Settings → About Phone → tap **Build Number** 7 times
+1. Settings → About Phone → tap **Build Number** 7 times
 2. Settings → Developer Options → enable **USB Debugging**
-3. Connect phone via USB cable
-4. Accept the "Allow USB debugging?" prompt on your phone
-
-Verify connection:
+3. Connect via USB → accept "Allow USB debugging?" on phone
 
 ```powershell
 adb devices
-# Must show your device as "device" (not "offline"):
-# XXXXXXXX    device
+# Must show: XXXXXXXX    device
 ```
 
-**Option B — Emulator:**
+**Emulator (if no physical phone):**
 
-> Use Pixel 4 API 30 (x86 AOSP) only. API 34 has Vulkan crashes with this project.
+> Use Pixel 4 API 30 (x86 AOSP) only. API 34 has Vulkan crashes.
 
-1. Open Android Studio → Device Manager
-2. Create virtual device → Pixel 4 → API 30 (AOSP, x86)
-3. Start the emulator — wait for it to fully boot (home screen visible)
-4. Run `adb devices` to confirm it shows as `device` (not `offline`)
+1. Android Studio → Device Manager → Create → Pixel 4 → API 30 (AOSP, x86)
+2. Start emulator — wait until home screen is fully visible
+3. `adb devices` → confirm shows `device` not `offline`
 
-> **IMPORTANT:** If BOTH a physical phone and emulator are connected, Gradle will try to install on both and fail if the emulator isn't fully booted. Always close the emulator when using a physical phone.
+> **CRITICAL:** If BOTH emulator and phone are connected, Gradle installs on both and fails if emulator isn't ready. Always close emulator when using phone.
 
-### Step 5 — Start Metro bundler (new terminal)
+### Step 4 — Start Metro bundler (new terminal)
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-android"
@@ -371,34 +333,240 @@ npx react-native start --reset-cache
 
 Wait for: `Metro waiting on exp://...`
 
-### Step 6 — Build and install APK (new terminal, run once)
+### Step 5 — Build and install debug APK (new terminal, run once)
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-android"
 npx react-native run-android
 ```
 
-This takes 3–7 minutes the first time. The app will auto-launch on your device when done.
+Takes 3–7 minutes first time. App auto-launches on device when done.
 
-### Step 7 — Set server URL in app
+### Step 6 — Set server URL in app
 
-When the app opens:
-
-1. Tap **Server Setup** (or settings icon)
-2. Enter your ngrok URL: `https://abc123.ngrok-free.app`
+1. Tap **Server Setup** in the app
+2. Enter ngrok URL: `https://abc123.ngrok-free.app`
 3. Tap **Save**
 4. Login with: `poc-test-key-12345678`
 
-### After first install — reload JS without rebuilding
+### Reload JS without rebuilding
 
-After the APK is installed, you only need Metro running for JS changes. To reload:
-
-- **Shake the phone** → tap **Reload**  
-- Or press `R` twice in the Metro terminal
+After first install, for JS-only changes just shake phone → **Reload** (or press `R` twice in Metro terminal).
 
 ---
 
-## 7. Google Flow Session Setup
+## 7. Android Release APK Build
+
+> The release APK is a **signed, standalone installer** — no Metro, no PC required. Share this file with testers or install on any Android device.
+
+### Step 1 — Generate signing keystore (ONE TIME ONLY)
+
+The keystore is your app's identity. **If you lose it you cannot update the app.**
+
+```powershell
+# Navigate to the EXACT folder — keystore must live here
+cd "C:\App Development\poc-ai-creative-studio\poc-android\android\app"
+
+keytool -genkey -v -keystore my-release-key.keystore -alias my-key-alias -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Fill in the prompts (use your real info or placeholders):
+
+```
+Enter keystore password:  yourpassword123
+Re-enter new password:    yourpassword123
+What is your first and last name?  Your Name
+What is the name of your org unit?  Dev
+What is the name of your organization?  YourBrand
+What is the name of your City?  Pune
+What is the name of your State?  Maharashtra
+What is the two-letter country code?  IN
+Is this correct? yes
+```
+
+Verify it was created:
+
+```powershell
+dir my-release-key.keystore
+# Must show the file (~2KB)
+```
+
+> **BACKUP:** Copy `my-release-key.keystore` to a safe location (Google Drive, USB). Never commit it to Git.
+
+### Step 2 — Add keystore credentials to gradle.properties
+
+Open `poc-android/android/gradle.properties` and add at the bottom:
+
+```properties
+MYAPP_RELEASE_STORE_FILE=my-release-key.keystore
+MYAPP_RELEASE_KEY_ALIAS=my-key-alias
+MYAPP_RELEASE_STORE_PASSWORD=yourpassword123
+MYAPP_RELEASE_KEY_PASSWORD=yourpassword123
+```
+
+### Step 3 — Verify build.gradle signing config
+
+Open `poc-android/android/app/build.gradle`. The `signingConfigs` and `buildTypes` blocks must look exactly like this — **no commas between blocks** (common mistake):
+
+```gradle
+signingConfigs {
+    debug {
+        storeFile file('debug.keystore')
+        storePassword 'android'
+        keyAlias 'androiddebugkey'
+        keyPassword 'android'
+    }
+    release {
+        storeFile file(MYAPP_RELEASE_STORE_FILE)
+        storePassword MYAPP_RELEASE_STORE_PASSWORD
+        keyAlias MYAPP_RELEASE_KEY_ALIAS
+        keyPassword MYAPP_RELEASE_KEY_PASSWORD
+    }
+}
+buildTypes {
+    debug {
+        signingConfig signingConfigs.debug
+    }
+    release {
+        signingConfig signingConfigs.release
+        minifyEnabled false
+        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    }
+}
+```
+
+> **Common mistake:** A comma after the `debug { }` closing brace causes: `Could not find method debug() for arguments`. Remove it if present.
+
+### Step 4 — Create the assets folder (if missing)
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android"
+New-Item -ItemType Directory -Force "android\app\src\main\assets"
+```
+
+### Step 5 — Bundle the JavaScript
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android"
+
+npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+```
+
+Expected output:
+```
+info Writing bundle output to: android/app/src/main/assets/index.android.bundle
+info Done writing bundle output
+info Copying 6 asset files
+info Done copying assets
+```
+
+### Step 6 — Build the release APK
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android\android"
+.\gradlew.bat assembleRelease
+```
+
+Takes 5–10 minutes. Expected final line: `BUILD SUCCESSFUL`
+
+### Step 7 — Find your APK
+
+```powershell
+dir "C:\App Development\poc-ai-creative-studio\poc-android\android\app\build\outputs\apk\release\"
+```
+
+File: **`app-release.apk`**
+
+### Step 8 — Install or distribute
+
+**Install via USB:**
+```powershell
+adb install "android\app\build\outputs\apk\release\app-release.apk"
+```
+
+**Install manually (no cable):**
+1. Copy `app-release.apk` to your phone via WhatsApp, Google Drive, or USB
+2. On phone: tap the APK file
+3. If prompted: Settings → Security → allow **Install unknown apps**
+4. Tap Install
+
+**Share with testers:**
+Just send the `app-release.apk` file — they install it the same way.
+
+### Step 9 — Configure server URL after install
+
+After installing the release APK:
+1. Open the app → go to **Server Setup**
+2. Enter your ngrok URL: `https://abc123.ngrok-free.app`
+3. Tap Save → Login with: `poc-test-key-12345678`
+
+### APK build — complete command sequence
+
+```powershell
+# Run these in order every time you want a new release APK:
+
+# 1. Create assets folder (only if missing)
+cd "C:\App Development\poc-ai-creative-studio\poc-android"
+New-Item -ItemType Directory -Force "android\app\src\main\assets"
+
+# 2. Bundle JS
+npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+
+# 3. Build APK
+cd android
+.\gradlew.bat assembleRelease
+
+# 4. Install (optional)
+adb install app\build\outputs\apk\release\app-release.apk
+```
+
+---
+
+## 8. Electron Production Build (.exe)
+
+### Build the installer
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-electron"
+npm run build
+```
+
+Output: `poc-electron/dist-electron/NovaCraft Setup 1.0.0.exe`
+
+### If build fails with "Access is denied" (NSIS cache error)
+
+This is a Windows Defender issue — it holds a lock on the downloaded NSIS executable during antivirus scanning.
+
+**Fix A — Add Defender exclusion (permanent fix):**
+```powershell
+# Run PowerShell as Administrator
+Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron-builder\Cache"
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\nsis" -ErrorAction SilentlyContinue
+npm run build
+```
+
+**Fix B — Manually extract NSIS (no security changes):**
+```powershell
+# Clear corrupt cache
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\nsis" -ErrorAction SilentlyContinue
+
+# Create target directory
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\electron-builder\Cache\nsis\nsis-3.0.4.1"
+
+# Download
+$url = "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z"
+Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\nsis-3.0.4.1.7z"
+
+# Extract with 7-Zip (install from https://www.7-zip.org if missing)
+& "C:\Program Files\7-Zip\7z.exe" x "$env:TEMP\nsis-3.0.4.1.7z" -o"$env:LOCALAPPDATA\electron-builder\Cache\nsis\nsis-3.0.4.1" -y
+
+# Build
+npm run build
+```
+
+---
+
+## 9. Google Flow Session Setup
 
 This is required to generate images and videos. Google Flow has no public API — the backend uses Playwright to automate a real Chrome browser with your logged-in session.
 
@@ -409,15 +577,14 @@ cd "C:\App Development\poc-ai-creative-studio\poc-backend"
 npm run capture:session
 ```
 
-A Chrome window will open. Follow these steps:
+A Chrome window opens. Follow these steps:
 
-1. **Log in** with a real Gmail account (not a disposable email)
+1. **Log in** with a real Gmail account (not a disposable email domain)
 2. Navigate to `https://labs.google/fx/tools/flow`
 3. Wait until you see the Flow gallery (image grid)
-4. The script will **automatically detect** the session and update `.env`
+4. The script **automatically** detects the session and updates `.env`
 
 You will see:
-
 ```
 ✅ Logged in as: yourname@gmail.com
 ✅ Cookie captured (1064 chars)
@@ -427,69 +594,65 @@ You will see:
 
 ### Re-capture (every ~7 days)
 
-The session cookie expires weekly. Symptoms of an expired cookie:
-- Backend logs show `Session cookie expired`
+Session cookie expires weekly. Symptoms of an expired cookie:
+- Backend shows `Session cookie expired`
 - All generations fail immediately
-- Logs show `accounts.google.com` redirect
-
-Re-capture procedure:
+- Logs show redirect to `accounts.google.com`
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-backend"
 npm run capture:session
-# Log in again in the Chrome window
 npm start
 ```
 
 ### Build account trust first (new account only)
 
-Google assigns trust scores to accounts. A fresh account with no history will get reCAPTCHA 403 errors on first automated use.
+Fresh accounts have zero trust score and get reCAPTCHA 403 errors.
 
-Before running the backend with a new account:
-
-1. **Manually open Chrome** (not the capture script)
+Before first automated use:
+1. Open regular Chrome (NOT the capture script)
 2. Log in at `https://labs.google/fx/tools/flow`
-3. **Manually generate 3–5 images** using the web UI
+3. Manually generate 3–5 images/videos in the web UI
 4. Leave the page open for 5–10 minutes
 5. Then run `npm run capture:session`
 
-### Important .env rule
+### Critical .env rule
 
-The `.env` file must have **exactly one** `FLOW_SESSION_COOKIE=` line — no commented-out old values. If you see `//FLOW_SESSION_COOKIE=...` at the top of `.env`, delete that line. It will cause the capture script to update the wrong line.
+The `.env` file must have **exactly one** `FLOW_SESSION_COOKIE=` line. A commented-out old value at the top (`//FLOW_SESSION_COOKIE=...`) causes the capture script to update the wrong line — server loads the old stale cookie.
 
-Correct `.env` format:
-
+Correct format:
 ```env
-# Only ONE occurrence of this key:
+# Only ONE occurrence, no // prefixed copies above it:
 FLOW_SESSION_COOKIE=eyJhbGci...your_token_here...
 ```
 
 ---
 
-## 8. Environment Variables Reference
+## 10. Environment Variables Reference
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `PORT` | No | `3001` | Backend HTTP port |
 | `FLOW_MODE` | Yes | `browser` | Always set to `browser` |
-| `HEADLESS` | No | `true` | `false` to see Chrome window (helps debug reCAPTCHA) |
+| `HEADLESS` | No | `true` | `false` shows Chrome window (helps debug reCAPTCHA) |
 | `FLOW_SESSION_COOKIE` | **Yes** | — | Google session token, captured via `npm run capture:session` |
 | `REDIS_URL` | No | `redis://127.0.0.1:6379` | Redis connection string |
 | `JWT_SECRET` | Yes | — | Random 32+ char string for JWT signing |
 | `BROWSER_POOL_SIZE` | No | `2` | Max concurrent generation jobs |
-| `VIDEO_RATE_LIMIT` | No | `3` | Max video jobs per rate window |
-| `RATE_WINDOW_SEC` | No | `60` | Rate window in seconds |
+| `VIDEO_RATE_LIMIT` | No | `20` | Max video jobs per rate window |
+| `RATE_WINDOW_SEC` | No | `300` | Rate window in seconds |
 | `MIN_GEN_GAP_MS` | No | `5000` | Min ms between jobs per user |
 | `DB_PATH` | No | `./poc.db` | SQLite database file path |
 | `CREDIT_WARN_THRESHOLD` | No | `500` | Log warning below this credit count |
+| `CREDIT_CRITICAL_THRESHOLD` | No | `50` | Log critical alert below this count |
 
 ---
 
-## 9. Daily Startup Workflow
+## 11. Daily Startup Workflow
 
-Every time you want to use the app, start these in order:
+Start in this exact order every session:
 
-### Terminal 1 — Redis (if not already running)
+### Terminal 1 — Redis
 
 ```powershell
 redis-server
@@ -519,22 +682,22 @@ cd "C:\App Development\poc-ai-creative-studio\poc-electron"
 npm start
 ```
 
-### Terminal 5 — Android Metro (Android users only)
+### Terminal 5 — Android Metro (development only, not needed for release APK)
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-android"
 npx react-native start
 ```
 
-> After first install, you only need Terminals 1–3 + Metro. The APK is already on the device.
+> **Release APK users:** Only need Terminals 1–3. The installed APK runs standalone — no Metro needed.
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 ### "Too many requests" error in app
 
-Caused by stuck jobs in the database. Run:
+Caused by stuck jobs in the database.
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-backend"
@@ -543,7 +706,7 @@ redis-cli FLUSHALL
 npm start
 ```
 
-If `fix.js` doesn't exist, create it:
+If `fix.js` doesn't exist, create it in `poc-backend/`:
 
 ```javascript
 // fix.js — run from poc-backend: node fix.js
@@ -567,40 +730,36 @@ db.close();
 
 ### Session shows wrong email on startup
 
-Cause: `.env` has a commented-out old cookie at the top (`//FLOW_SESSION_COOKIE=...`).
+Cause: `.env` has a commented-out old cookie line (`//FLOW_SESSION_COOKIE=...`).
 
 Fix:
 1. Open `poc-backend/.env`
 2. Delete the line starting with `//FLOW_SESSION_COOKIE=`
-3. Run `npm run capture:session` again
-4. `npm start`
+3. Confirm only ONE `FLOW_SESSION_COOKIE=` line exists
+4. Run `npm run capture:session` again → `npm start`
 
 ---
 
 ### reCAPTCHA 403 "unusual activity" error
 
-This means Google is blocking the automated browser. Causes and fixes:
-
 | Cause | Fix |
 |---|---|
 | New account with no history | Use Flow manually for 5–10 minutes first |
 | Disposable email domain | Switch to a real @gmail.com account |
-| Repeated failed attempts | Wait 30–60 minutes, then retry |
+| Repeated failed attempts | Wait 30–60 minutes before retrying |
 | Headless mode detection | Set `HEADLESS=false` in `.env` |
 
 ---
 
 ### Android "Can't find service: package" build error
 
-Caused by the emulator or phone not being ready when Gradle tries to install.
+The emulator isn't fully booted when Gradle tries to install.
 
 ```powershell
-# Check device status
 adb devices
-# Should show: XXXXXXXX    device
-# If it shows "offline" — wait and try again
+# Must show: XXXXXXXX    device  (not "offline")
 
-# If both emulator AND phone are connected, kill the emulator:
+# If emulator is connected alongside phone, kill it:
 adb -s emulator-5554 emu kill
 
 # Then retry:
@@ -611,29 +770,83 @@ npx react-native run-android
 
 ### Android build fails with multiple devices connected
 
-Gradle installs on ALL connected devices simultaneously. If the emulator isn't fully booted, it fails.
+Gradle installs on ALL connected devices. If any device isn't ready, the whole task fails.
 
-**Fix:** Always close the emulator when using a physical phone. Run `adb devices` before building to confirm only one device is listed.
+**Fix:** Close the emulator when using physical phone. Always verify `adb devices` shows only one device before building.
+
+---
+
+### APK build — "Could not find method debug()" error
+
+Cause: A comma after the `debug { }` block in `build.gradle` (Groovy syntax error).
+
+Find and remove the comma:
+```gradle
+# WRONG — comma causes the error:
+signingConfigs {
+    debug {
+        ...
+    },     ← remove this comma
+    release {
+```
+
+```gradle
+# CORRECT:
+signingConfigs {
+    debug {
+        ...
+    }
+    release {
+```
+
+---
+
+### APK build — "Keystore file not found" error
+
+```
+Keystore file 'android/app/my-release-key.keystore' not found
+```
+
+The keystore was not generated in the correct folder. Generate it in the exact location Gradle expects:
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android\android\app"
+keytool -genkey -v -keystore my-release-key.keystore -alias my-key-alias -keyalg RSA -keysize 2048 -validity 10000
+```
+
+---
+
+### APK bundle error — "ENOENT: no such file or directory"
+
+```
+error ENOENT: no such file or directory, open '...assets/index.android.bundle'
+```
+
+The `assets` folder doesn't exist yet.
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android"
+New-Item -ItemType Directory -Force "android\app\src\main\assets"
+# Then re-run the bundle command
+```
 
 ---
 
 ### "Video prompt input not found" error
 
-The Playwright automation couldn't type into Google Flow's input field. This usually means the page loaded in an unexpected state.
+Playwright couldn't type into Google Flow's input. Backend retries automatically 3 times. If it keeps failing:
 
-The backend will automatically retry 3 times. If it keeps failing:
-
-1. Check `HEADLESS=false` in `.env` to see what's happening in the browser
-2. Restart the backend: `Ctrl+C` then `npm start`
-3. Check if the Google Flow page (`labs.google/fx/tools/flow`) loads normally in your regular browser
+1. Set `HEADLESS=false` in `.env` to see what Chrome is doing
+2. Restart the backend: `Ctrl+C` → `npm start`
+3. Check `labs.google/fx/tools/flow` loads normally in your regular browser
 
 ---
 
 ### "Session cookie expired" error
 
 ```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-backend"
 npm run capture:session
-# Log in again, then:
 npm start
 ```
 
@@ -645,47 +858,54 @@ npm start
 Error: connect ECONNREFUSED 127.0.0.1:6379
 ```
 
-Start Redis:
-
 ```powershell
 redis-server
 ```
 
 ---
 
-### Image/video is generated but reference image is ignored
+### Reference image ignored in video generation
 
-This is the "file deleted on retry" bug — fixed in the current `flowProxy.js`. Make sure you are using the latest version of `poc-backend/services/flowProxy.js` from the repository.
-
-Symptoms in logs:
+Symptom in logs:
 ```
 Attempt 1: ✅ Reference image set via input[type="file"]
-Attempt 2: Reference image not found, skipping   ← file deleted too early
+Attempt 2: Reference image not found, skipping
 ```
 
-Fix: Use the latest `flowProxy.js` where file cleanup only happens in `browserGenerateVideo`'s `finally` block.
+Fix: Make sure you are using the latest `poc-backend/services/flowProxy.js`. The file cleanup must only happen in `browserGenerateVideo`'s `finally` block — not inside `uploadReferenceImage`'s own `finally` block.
 
 ---
 
 ### Android image picker not working
 
-Make sure `react-native-image-picker` is installed:
-
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-android"
 npm install react-native-image-picker
-npx react-native run-android
+npx react-native run-android   # full native rebuild required
 ```
 
-The package requires a native rebuild — shaking and reloading JS is not enough.
+Shaking and reloading JS is not enough — this package requires a native rebuild.
 
 ---
 
-## 11. Maintenance
+### Electron build "Access is denied" (NSIS cache)
+
+See **Section 8** for the full fix. Quick version:
+
+```powershell
+# Run as Administrator:
+Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\electron-builder\Cache"
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\nsis"
+npm run build
+```
+
+---
+
+## 13. Maintenance
 
 ### Weekly — Refresh session cookie
 
-Every ~7 days the Google Flow session expires. You will notice videos stop generating.
+Every ~7 days the Google Flow session expires.
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-backend"
@@ -694,7 +914,7 @@ npm run capture:session
 npm start
 ```
 
-### Clear stale jobs (if generation gets stuck)
+### Clear stale jobs
 
 ```powershell
 cd "C:\App Development\poc-ai-creative-studio\poc-backend"
@@ -705,19 +925,36 @@ npm start
 
 ### Check remaining Google credits
 
-Credits are logged automatically in the backend console:
-
+Credits appear automatically in backend logs:
 ```
 [CreditMonitor] Remaining credits: 18420
 ```
 
-Credits are consumed per generation:
+Credits consumed per generation:
 - Image: ~2 credits
 - Video 4s: ~5 credits
 - Video 6s: ~8 credits
 - Video 8s: ~10 credits
 
-### Database table names (for direct SQL queries)
+### Rebuild release APK after code changes
+
+Every time you change Android code and want a new release APK:
+
+```powershell
+cd "C:\App Development\poc-ai-creative-studio\poc-android"
+
+# Re-bundle JS (always do this before assembleRelease)
+npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+
+# Rebuild APK
+cd android
+.\gradlew.bat assembleRelease
+
+# New APK at:
+# android\app\build\outputs\apk\release\app-release.apk
+```
+
+### Database table names
 
 | Table | Purpose |
 |---|---|
@@ -727,12 +964,21 @@ Credits are consumed per generation:
 | `refresh_tokens` | JWT refresh tokens |
 | `user_projects` | Per-user Google Flow project IDs |
 
-Example query to inspect jobs:
-
+Inspect recent jobs:
 ```powershell
 # From poc-backend directory:
 node -e "const DB=require('better-sqlite3')('./poc.db'); console.log(JSON.stringify(DB.prepare('SELECT id,type,status,created_at FROM poc_jobs ORDER BY created_at DESC LIMIT 10').all(),null,2))"
 ```
+
+### Key files to back up
+
+Never lose these files:
+
+| File | Why critical |
+|---|---|
+| `poc-backend/.env` | All config including session cookie |
+| `poc-android/android/app/my-release-key.keystore` | App signing identity — losing it means you cannot update the app |
+| `poc-android/android/gradle.properties` | Keystore credentials |
 
 ---
 
