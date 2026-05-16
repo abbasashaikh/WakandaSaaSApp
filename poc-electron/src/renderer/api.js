@@ -210,11 +210,66 @@ export async function generateImage(promptOrKey, optionsOrUndefined) {
   return res.json()
 }
 
+// ── apiFetchFormData — multipart (for file uploads) ───────────────────────────
+// NEVER set Content-Type manually — browser sets it automatically with boundary
+async function apiFetchFormData(endpoint, formData) {
+  const token = await getAccessToken()
+  const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...BYPASS_HEADERS,
+  }
+  const res = await fetch(`${BASE}${endpoint}`, {
+    method:  'POST',
+    headers,
+    body:    formData,
+  })
+  if (res.status === 401) {
+    await window.electronAPI?.auth.clearTokens()
+    throw new Error('jwt_expired')
+  }
+  return res
+}
+
 export async function generateVideo(promptOrKey, optionsOrUndefined) {
   const opts = _normalizeArgs(promptOrKey, optionsOrUndefined)
+  const { start_frame, end_frame, reference_image, ...restOpts } = opts
+
+  // ── Has file attachments → use FormData ───────────────────────────────────
+  const hasFiles = (start_frame   instanceof File) ||
+                   (end_frame     instanceof File) ||
+                   (reference_image instanceof File)
+
+  if (hasFiles) {
+    const fd = new FormData()
+    // ALWAYS use string for prompt — never serialize objects
+    fd.append('prompt',   String(restOpts.prompt || ''))
+    // Duration MUST be in "Xs" format — backend validates ['4s','6s','8s']
+    const dur = restOpts.duration
+    fd.append('duration', typeof dur === 'number' ? `${dur}s` : String(dur || '8s'))
+    fd.append('quality',  String(restOpts.quality || 'fast'))
+    if (restOpts.aspect_ratio) fd.append('aspect_ratio', restOpts.aspect_ratio)
+
+    if (start_frame   instanceof File) fd.append('start_frame',   start_frame,   start_frame.name)
+    if (end_frame     instanceof File) fd.append('end_frame',     end_frame,     end_frame.name)
+    if (reference_image instanceof File) fd.append('reference_image', reference_image, reference_image.name)
+
+    const res = await apiFetchFormData('/generate/video', fd)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || `Failed to queue video (${res.status})`)
+    }
+    return res.json()
+  }
+
+  // ── No files → JSON (always explicit duration format) ─────────────────────
+  const dur = restOpts.duration
+  const cleanOpts = {
+    ...restOpts,
+    duration: typeof dur === 'number' ? `${dur}s` : String(dur || '8s'),
+  }
   const res = await apiFetch('/generate/video', {
     method: 'POST',
-    body: JSON.stringify(opts),
+    body:   JSON.stringify(cleanOpts),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

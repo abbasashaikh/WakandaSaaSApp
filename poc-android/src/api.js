@@ -1,15 +1,14 @@
 // src/api.js — Android API client
 // Mirrors poc-electron/src/renderer/api.js exactly.
-// Only two differences:
-//   1. PLATFORM = 'android'  (platform identifier sent to backend)
+// Only differences from Electron:
+//   1. PLATFORM = 'android'
 //   2. Token storage uses AsyncStorage (not Electron IPC)
 //   3. BASE_URL from AsyncStorage (set at app startup from user input)
+//   4. generateVideo supports React Native FormData { uri, type, name } for frames
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // ── Platform identifier ───────────────────────────────────────────────────────
-// Backend logs this on every request and stores it on each job record.
-// Backend team can query: SELECT * FROM poc_jobs WHERE platform='android'
 const PLATFORM = 'android'
 
 // ── URL resolution ────────────────────────────────────────────────────────────
@@ -29,7 +28,7 @@ export function setApiUrl(rawUrl) {
 
 export function getApiUrl() { return _MEDIA_BASE }
 
-// ── Bypass + platform headers (sent on every request) ─────────────────────────
+// ── Bypass + platform headers ─────────────────────────────────────────────────
 function getBypassHeaders() {
   return {
     'ngrok-skip-browser-warning': 'true',
@@ -59,6 +58,8 @@ const ERROR_MAP = [
     msg: 'Too many requests. Please wait a moment.' },
   { match: /pool.acquire.timeout/i,
     msg: 'Server is busy. Please wait for current job to finish.' },
+  { match: /file.too.large|FILE_TOO_LARGE/i,
+    msg: 'Image file is too large. Please use an image under 10MB.' },
   { match: /ECONNREFUSED|ENOTFOUND|network/i,
     msg: 'Cannot reach server. Check your server URL in settings.' },
   { match: /jwt.expired|token.*expired|unauthorized/i,
@@ -73,7 +74,7 @@ export function friendlyError(raw) {
   return raw.replace(/Call log:[\s\S]*/i, '').trim().slice(0, 140)
 }
 
-// ── Token storage (AsyncStorage — Android secure equivalent) ──────────────────
+// ── Token storage ─────────────────────────────────────────────────────────────
 export async function saveTokens(tokens) {
   await AsyncStorage.setItem('auth_tokens', JSON.stringify(tokens))
 }
@@ -123,6 +124,7 @@ async function _doRefresh(refreshToken) {
   return t.accessToken
 }
 
+// ── apiFetch — JSON requests ───────────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
   const token = await getAccessToken()
   const headers = {
@@ -132,6 +134,30 @@ async function apiFetch(endpoint, options = {}) {
     ...options.headers,
   }
   const res = await fetch(`${_BASE}${endpoint}`, { ...options, headers })
+  if (res.status === 401) {
+    await clearTokens()
+    throw new Error('jwt_expired')
+  }
+  return res
+}
+
+// ── apiFetchFormData — multipart/form-data for file uploads ───────────────────
+// React Native FormData is different from web:
+//   Web:    formData.append('field', fileObject)
+//   RN:     formData.append('field', { uri, type, name })
+// DO NOT set Content-Type — React Native sets it with boundary automatically.
+async function apiFetchFormData(endpoint, formData) {
+  const token = await getAccessToken()
+  const headers = {
+    // Content-Type deliberately omitted — RN sets multipart/form-data + boundary
+    ...getBypassHeaders(),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+  const res = await fetch(`${_BASE}${endpoint}`, {
+    method:  'POST',
+    headers,
+    body:    formData,
+  })
   if (res.status === 401) {
     await clearTokens()
     throw new Error('jwt_expired')
@@ -182,7 +208,7 @@ export async function getMe() {
   return res.json()
 }
 
-// ── Generation ────────────────────────────────────────────────────────────────
+// ── generateImage ─────────────────────────────────────────────────────────────
 export async function generateImage(prompt, options = {}) {
   const res = await apiFetch('/generate/image', {
     method: 'POST',
@@ -195,10 +221,62 @@ export async function generateImage(prompt, options = {}) {
   return res.json()
 }
 
+// ── generateVideo — supports optional start_frame / end_frame / reference_image
+// Frame assets are { uri, type, name } objects from react-native-image-picker.
+// When frames are present, uses multipart FormData instead of JSON.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function generateVideo(prompt, options = {}) {
+  const { start_frame, end_frame, reference_image, duration, quality, aspect_ratio } = options
+
+  // Detect if any frame asset is attached
+  // React Native image picker returns { uri, type, fileName } — we check for uri
+  const hasFrames = (start_frame?.uri) || (end_frame?.uri) || (reference_image?.uri)
+
+  // Normalise duration: accept '8s', '8', 8 — always send as 'Xs' string
+  const durStr = String(duration || '8').replace(/s$/i, '') + 's' // '8' → '8s', '8s' → '8s', 8 → '8s'
+
+  if (hasFrames) {
+    // Build FormData — React Native style
+    const fd = new FormData()
+    fd.append('prompt',       prompt)
+    fd.append('duration',     durStr)
+    fd.append('quality',      quality || 'fast')
+    if (aspect_ratio) fd.append('aspect_ratio', aspect_ratio)
+
+    if (start_frame?.uri) {
+      fd.append('start_frame', {
+        uri:  start_frame.uri,
+        type: start_frame.type || 'image/jpeg',
+        name: start_frame.fileName || start_frame.name || 'start_frame.jpg',
+      })
+    }
+    if (end_frame?.uri) {
+      fd.append('end_frame', {
+        uri:  end_frame.uri,
+        type: end_frame.type || 'image/jpeg',
+        name: end_frame.fileName || end_frame.name || 'end_frame.jpg',
+      })
+    }
+    if (reference_image?.uri) {
+      fd.append('reference_image', {
+        uri:  reference_image.uri,
+        type: reference_image.type || 'image/jpeg',
+        name: reference_image.fileName || reference_image.name || 'reference.jpg',
+      })
+    }
+
+    const res = await apiFetchFormData('/generate/video', fd)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || `Failed to queue video (${res.status})`)
+    }
+    return res.json()
+  }
+
+  // No frames — JSON request
   const res = await apiFetch('/generate/video', {
     method: 'POST',
-    body:   JSON.stringify({ prompt, ...options }),
+    body:   JSON.stringify({ prompt, duration: durStr, quality: quality || 'fast', aspect_ratio }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

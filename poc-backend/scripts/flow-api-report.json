@@ -1,0 +1,323 @@
+{
+  "generatedAt": "2026-05-11T06:18:56.015Z",
+  "projectId": "4a4edbe4-64dc-464e-9ae8-c4bfc7704b26",
+  "sessionCookie": {
+    "name": "__Secure-next-auth.session-token",
+    "value": "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..OdXgSy25NflD17r2.Ooy9pdqzMlwm01PxeTm06NKqUJjOoBHGw809yXw4Ljqy7TJqk9Jv1kKEC0ItsWSD5S3ROPkpRD3dUeFVgMP2YBnwYmTZ2NMzRRgD7gHI17nid3NFuhkikzMNQrPG06J0XDI3OVgzBIDJXad6nTHPd9NM8KrNN1IPBBaFXFBmj195fnZKENDP-O4nB9_Zg6TbRQv9a09K_iBSRPK3kop-8NuJTP7pmYU3aBHV_tx-2vbC2Iyuj8s1Ea6XK-Lp-0EC1jaLEqaKKaZRPqYbFcT55WdDUv4pOPF7hRs1N1QuxqaSEDx6xt3_aO7RHfDujK3yx1F9D48OEvDM5meUhsalihtXOWHXfcrZTM0xhOiF5sClyuYs_cg0A_kfg25-CsbTDrd9Blj-BUnhOZdiK5lISMBixmOuWh1WK7M1zq5Wakb2Vdm9wWYafaRNZDPkecNBCcxfpTG8jFwf4CtH8ws2Ua6X0yu8wO2b4wER9fG2fRCn0428A3awU6fQXte9FhMn1k0Nx7_XylN2lYHYaOKNn809amMOPm7eN-32N_PpKnNHL6HDUrYqs5jszr0JosjKNnGywlpFaZuLfMfsDy0zP8qK-QV8y3SMZqWEIZRgroZ7tGfxnQBZdVoqr8bZxKBlNuDlhrknz0D2Gf7iJWxdNFnA8hGC0DtsE_mqPjhlDNaGm3iAkiklYSK3XuAijEn366ohZATdtglhxRyKRt6cMe6Hc5BAPyK4YDJF-nW4J3w-d7YiFgdBy2FBZdL_DRNW4SeznAntwmr9oh0zjPnvLorq9VrKqfZFQ-fX-EtiMxLqYKUuTQSzYPhMFAJHtu8EOwKw7ngAD5qK3broXV1iPy2BHn8tyTLhJWn3VqBOzHBMoVfpDJL4RUEpMhpwn6rx4Cgt8rLRI329pqnVyfwvN5-tQ00dVahfsLkQOp_M5ykO90EifotyctO-zHWLcXFvTXUW5R9m2Av0w5jO3_VLvfT5O9Qqm61mnuU.0jr12-u1cGrsLuQDadDbzA"
+  },
+  "postCalls": [
+    {
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"May 11, 11:42 AM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"4a4edbe4-64dc-464e-9ae8-c4bfc7704b26\",\"projectInfo\":{\"projectTitle\":\"May 11, 11:42 AM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"May 11, 11:48 AM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"a005adc3-01a8-4233-9351-5b055e06cc5a\",\"projectInfo\":{\"projectTitle\":\"May 11, 11:48 AM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    }
+  ],
+  "generationCalls": [],
+  "allCalls": [
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "{\"error\":{\"json\":{\"message\":\"Unauthorized\",\"code\":-32001,\"data\":{\"code\":\"UNAUTHORIZED\",\"httpStatus\":401,\"path\":\"project.searchUserProjects\",\"zodError\":null},\"status\":401}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchUserPreferences",
+      "url": "https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "{\"error\":{\"json\":{\"message\":\"Unauthorized\",\"code\":-32001,\"data\":{\"code\":\"UNAUTHORIZED\",\"httpStatus\":401,\"path\":\"general.fetchUserPreferences\",\"zodError\":null},\"status\":401}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": null
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"2f6bf0f3-46f7-49aa-9732-07d1da33874a\",\"projectInfo\":{\"projectTitle\":\"5/2/2026, 11:33:19 AM\",\"thumbnailMediaKey\":\"b76e7f22-15a8-4925-8620-ce67141718c4\"},\"creationTime\":\"2026-05-02T06:03:19.905743Z\"},{\"projectId\":\"4b22dca6-6e53-4a7f-8858-46d1befb3867\",\"projectInfo\":{\"projectTitle\":\"5/2/2026, 10:48:10 AM\",\"thumbnailMediaKey\":\"3dbcf4cc-2e80-4986-9efa-42ee436ee9b8\"},\"creationTime\":\"2026-05-02T05:18:11.075034Z\"},{\"projectId\":\"19e3ad4d-f83f"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchUserPreferences",
+      "url": "https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"enableHistory\":true},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchMigrationStatus",
+      "url": "https://labs.google/fx/api/trpc/general.fetchMigrationStatus?input=%7B%22json%22%3A%7B%22tool%22%3A%22IMAGE_FX%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchMigrationStatus",
+      "url": "https://labs.google/fx/api/trpc/general.fetchMigrationStatus?input=%7B%22json%22%3A%7B%22tool%22%3A%22BACKBONE%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b76e7f22-15a8-4925-8620-ce67141718c4&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=3dbcf4cc-2e80-4986-9efa-42ee436ee9b8&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b0509ab1-9a7b-40dd-89e6-45d317dec9ac&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "POST",
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"May 11, 11:42 AM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"4a4edbe4-64dc-464e-9ae8-c4bfc7704b26\",\"projectInfo\":{\"projectTitle\":\"May 11, 11:42 AM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b76e7f22-15a8-4925-8620-ce67141718c4&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=3dbcf4cc-2e80-4986-9efa-42ee436ee9b8&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b0509ab1-9a7b-40dd-89e6-45d317dec9ac&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "flow.projectInitialData",
+      "url": "https://labs.google/fx/api/trpc/flow.projectInitialData?input=%7B%22json%22%3A%7B%22projectId%22%3A%224a4edbe4-64dc-464e-9ae8-c4bfc7704b26%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"projectName\":\"May 11, 11:42 AM\",\"projectId\":\"4a4edbe4-64dc-464e-9ae8-c4bfc7704b26\",\"projectContents\":{\"externalReferenceMedia\":[{\"mediaId\":\"achernar\",\"mediaType\":\"AUDIO\",\"workflowDisplayName\":\"Achernar\",\"media\":{\"name\":\"achernar\",\"audio\":{\"generatedAudio\":{\"name\":\"Achernar\",\"description\":\"Female, soft, high pitch\",\"isPresetAudioSample\":true,\"audioSamplePath\":\"https://gstatic.com/aistudio/voices/samples/Achernar.wav\"}}}},{\"mediaId\":\"achird\",\"mediaType\":\"AUDIO\",\"workflo"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchUserPreferences",
+      "url": "https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"enableHistory\":true},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3A%22chEKD4IBDAjrvvzOBhD4v%252F%252FdAg%253D%253D%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"9ddeb922-d98f-4c8c-bcbc-fa6ba8aaa531\",\"projectInfo\":{\"projectTitle\":\"4/15/2026, 10:44:56 AM\"},\"creationTime\":\"2026-04-15T05:14:56.667286Z\"},{\"projectId\":\"5d353c90-fdf3-4b4f-b0fb-589ebb3daa52\",\"projectInfo\":{\"projectTitle\":\"4/15/2026, 10:42:01 AM\",\"thumbnailMediaKey\":\"3fec62a6-f684-4518-a2f3-38fca3e23236\"},\"creationTime\":\"2026-04-15T05:12:01.646543Z\"},{\"projectId\":\"1622c545-1950-4671-9bc6-9cda2298d061\",\"projectInfo\":{\"projectTitle\":\"4"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3A%22chEKD4IBDAjX2vfOBhD4iszpAQ%253D%253D%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"c1a9ea09-cca2-4e56-b998-3db55fa5c074\",\"projectInfo\":{\"projectTitle\":\"4/14/2026, 12:59:16 PM\"},\"creationTime\":\"2026-04-14T07:29:16.099684Z\"},{\"projectId\":\"c3e06a82-a900-4788-bd42-559c4f5c2e9f\",\"projectInfo\":{\"projectTitle\":\"4/14/2026, 12:58:19 PM\",\"thumbnailMediaKey\":\"81c31a91-d33b-48e0-8896-4438eab4b350\"},\"creationTime\":\"2026-04-14T07:28:18.938761Z\"},{\"projectId\":\"d2248df8-388a-471e-b1b3-fe4460e05494\",\"projectInfo\":{\"projectTitle\":\"4"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3A%22chEKD4IBDAisx%252B3OBhDIiI7WAQ%253D%253D%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"eb14da20-9406-4ea2-804f-de4215e354cc\",\"projectInfo\":{\"projectTitle\":\"Cookie Test 1775985118438\"},\"creationTime\":\"2026-04-12T09:11:58.397643Z\"},{\"projectId\":\"09e096aa-532b-407a-ab16-b08248327eda\",\"projectInfo\":{\"projectTitle\":\"4/12/2026, 8:32:24 AM\"},\"creationTime\":\"2026-04-12T03:02:24.125618Z\"},{\"projectId\":\"9e67649e-a971-440c-9950-1ca4f5a7a839\",\"projectInfo\":{\"projectTitle\":\"4/12/2026, 8:32:16 AM\"},\"creationTime\":\"2026-04-12T03:02:1"
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3A%22chEKD4IBDAiwxufOBhDQoZSYAw%253D%253D%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"bb7f5bfe-b029-40e8-8c9c-d14d6af942a5\",\"projectInfo\":{\"projectTitle\":\"Cookie Test 1775887102093\"},\"creationTime\":\"2026-04-11T05:58:22.233194Z\"},{\"projectId\":\"e8665f60-96fa-4ec5-b86d-d0e611e3ccee\",\"projectInfo\":{\"projectTitle\":\"Apr 11, 11:26 AM\",\"thumbnailMediaKey\":\"e6ccf954-034d-48fa-87db-bb801aae3da9\"},\"creationTime\":\"2026-04-11T05:56:38.217186Z\"},{\"projectId\":\"404ea691-4530-4bd3-a3e6-1370e592daba\",\"projectInfo\":{\"projectTitle\":\"Prob"
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=362d079e-297e-43df-96a8-935091ac4b52",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=362d079e-297e-43df-96a8-935091ac4b52",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "project.searchUserProjects",
+      "url": "https://labs.google/fx/api/trpc/project.searchUserProjects?input=%7B%22json%22%3A%7B%22pageSize%22%3A20%2C%22toolName%22%3A%22PINHOLE%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projects\":[{\"projectId\":\"4a4edbe4-64dc-464e-9ae8-c4bfc7704b26\",\"projectInfo\":{\"projectTitle\":\"May 11, 11:42 AM\",\"thumbnailMediaKey\":\"362d079e-297e-43df-96a8-935091ac4b52\"},\"creationTime\":\"2026-05-11T06:12:49.016879Z\"},{\"projectId\":\"2f6bf0f3-46f7-49aa-9732-07d1da33874a\",\"projectInfo\":{\"projectTitle\":\"5/2/2026, 11:33:19 AM\",\"thumbnailMediaKey\":\"b76e7f22-15a8-4925-8620-ce67141718c4\"},\"creationTime\":\"2026-05-02T06:03:19.905743Z\"},{\"projectId\":\"4b22dca6-6e53-4a7f"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchUserPreferences",
+      "url": "https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"enableHistory\":true},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchMigrationStatus",
+      "url": "https://labs.google/fx/api/trpc/general.fetchMigrationStatus?input=%7B%22json%22%3A%7B%22tool%22%3A%22IMAGE_FX%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchMigrationStatus",
+      "url": "https://labs.google/fx/api/trpc/general.fetchMigrationStatus?input=%7B%22json%22%3A%7B%22tool%22%3A%22BACKBONE%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=362d079e-297e-43df-96a8-935091ac4b52&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b76e7f22-15a8-4925-8620-ce67141718c4&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=3dbcf4cc-2e80-4986-9efa-42ee436ee9b8&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b0509ab1-9a7b-40dd-89e6-45d317dec9ac&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "POST",
+      "proc": "project.createProject",
+      "url": "https://labs.google/fx/api/trpc/project.createProject",
+      "reqBody": "{\"json\":{\"projectTitle\":\"May 11, 11:48 AM\",\"toolName\":\"PINHOLE\"}}",
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"projectId\":\"a005adc3-01a8-4233-9351-5b055e06cc5a\",\"projectInfo\":{\"projectTitle\":\"May 11, 11:48 AM\"}},\"status\":200,\"statusText\":\"OK\"}}}}"
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=362d079e-297e-43df-96a8-935091ac4b52&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b76e7f22-15a8-4925-8620-ce67141718c4&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=3dbcf4cc-2e80-4986-9efa-42ee436ee9b8&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "media.getMediaUrlRedirect",
+      "url": "https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=b0509ab1-9a7b-40dd-89e6-45d317dec9ac&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL",
+      "reqBody": null,
+      "resStatus": 401,
+      "resBody": "\"Internal Error\""
+    },
+    {
+      "method": "GET",
+      "proc": "flow.projectInitialData",
+      "url": "https://labs.google/fx/api/trpc/flow.projectInitialData?input=%7B%22json%22%3A%7B%22projectId%22%3A%22a005adc3-01a8-4233-9351-5b055e06cc5a%22%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"projectName\":\"May 11, 11:48 AM\",\"projectId\":\"a005adc3-01a8-4233-9351-5b055e06cc5a\",\"projectContents\":{\"externalReferenceMedia\":[{\"mediaId\":\"achernar\",\"mediaType\":\"AUDIO\",\"workflowDisplayName\":\"Achernar\",\"media\":{\"name\":\"achernar\",\"audio\":{\"generatedAudio\":{\"name\":\"Achernar\",\"description\":\"Female, soft, high pitch\",\"isPresetAudioSample\":true,\"audioSamplePath\":\"https://gstatic.com/aistudio/voices/samples/Achernar.wav\"}}}},{\"mediaId\":\"achird\",\"mediaType\":\"AUDIO\",\"workflo"
+    },
+    {
+      "method": "GET",
+      "proc": "general.fetchUserPreferences",
+      "url": "https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D",
+      "reqBody": null,
+      "resStatus": 200,
+      "resBody": "{\"result\":{\"data\":{\"json\":{\"result\":{\"enableHistory\":true},\"status\":200,\"statusText\":\"OK\"}}}}"
+    }
+  ]
+}

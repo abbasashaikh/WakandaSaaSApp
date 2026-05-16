@@ -359,7 +359,245 @@ async function createProject(page, userId = null) {
   }
   return result.projectId;
 }
+async function uploadReferenceImage(page, filePath) {
+  const fs = require('fs');
+  if (!filePath || !fs.existsSync(filePath)) {
+    console.warn('[FlowProxy:BROWSER] Reference image not found, skipping upload:', filePath);
+    return false;
+  }
 
+  console.log(`[FlowProxy:BROWSER] Uploading reference image: ${require('path').basename(filePath)}`);
+
+  try {
+    // Strategy 1: Set file directly on any visible file input
+    // Playwright can set files on hidden inputs without clicking
+    const fileInputs = await page.$$('input[type="file"]');
+    for (const inp of fileInputs) {
+      try {
+        await inp.setInputFiles(filePath);
+        console.log('[FlowProxy:BROWSER] ✅ Reference image set via input[type="file"]');
+        await sleep(2500); // wait for upload to process in Flow's UI
+        return true;
+      } catch {}
+    }
+
+    // Strategy 2: Click the + / attach button to reveal file input, then set
+    // Google Flow's toolbar has a + button that opens an upload sheet
+    const plusResult = await page.evaluate(() => {
+      const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
+      if (!input) return null;
+      const inputRect = input.getBoundingClientRect();
+
+      // Look for + or upload buttons near the input (within 100px)
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"], label'));
+      const candidates = allBtns.filter(b => {
+        const r   = b.getBoundingClientRect();
+        const txt = (b.innerText || b.getAttribute('aria-label') || b.textContent || '').trim().toLowerCase();
+        const isNearInput = Math.abs((r.top + r.height / 2) - (inputRect.top + inputRect.height / 2)) < 100;
+        const isPlus      = txt === '+' || txt.includes('add') || txt.includes('attach') || txt.includes('upload');
+        return isNearInput && isPlus && r.width > 15 && r.height > 15;
+      });
+
+      if (candidates.length > 0) {
+        const r = candidates[0].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+      return null;
+    });
+
+    if (plusResult) {
+      await page.mouse.click(plusResult.x, plusResult.y);
+      console.log('[FlowProxy:BROWSER] Clicked + button for upload');
+      await sleep(1000);
+
+      // Now try to find and set the file input that appeared
+      const newInputs = await page.$$('input[type="file"]');
+      for (const inp of newInputs) {
+        try {
+          await inp.setInputFiles(filePath);
+          console.log('[FlowProxy:BROWSER] ✅ Reference image uploaded via + button');
+          await sleep(2500);
+          return true;
+        } catch {}
+      }
+    }
+
+    // Strategy 3: Use page.locator which auto-waits
+    try {
+      const locator = page.locator('input[type="file"]').first();
+      await locator.setInputFiles(filePath, { timeout: 5000 });
+      console.log('[FlowProxy:BROWSER] ✅ Reference image set via locator');
+      await sleep(2500);
+      return true;
+    } catch {}
+
+    console.warn('[FlowProxy:BROWSER] ⚠️ Could not upload reference image — generating without it');
+    return false;
+
+  } catch (err) {
+    console.warn(`[FlowProxy:BROWSER] Upload warning (non-fatal): ${err.message}`);
+    return false;
+  }
+  // NOTE: file cleanup intentionally NOT done here.
+  // BullMQ retries the job if attempt 1 fails (e.g. reCAPTCHA 403).
+  // Deleting the file here means attempts 2 and 3 can't find it.
+  // Cleanup happens in browserGenerateVideo's finally block after ALL retries complete.
+}
+
+// ── uploadVideoFrame — Start or End frame into Google Flow's Frames panel ─────
+// Sequence: click + → Video tab → Frames tab → click slot → fileChooser → set file
+async function uploadVideoFrame(page, filePath, slot) {
+  const fs = require('fs');
+  if (!filePath || !fs.existsSync(filePath)) {
+    console.warn(`[FlowProxy:BROWSER] ${slot} frame file not found, skipping: ${filePath}`);
+    return false;
+  }
+  console.log(`[FlowProxy:BROWSER] Uploading ${slot} frame: ${require('path').basename(filePath)}`);
+
+  try {
+    // Step 1: Find + button (leftmost button near input OR add_2/create icon)
+    // IMPORTANT: After start frame upload the panel closes and Flow re-renders.
+    // The + button may shift position — use both left-side detection AND icon text match.
+    const plusCoords = await page.evaluate(() => {
+      const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
+      if (!input) return null;
+      const inputRect = input.getBoundingClientRect();
+      const allBtns = Array.from(document.querySelectorAll('button,[role="button"]'));
+
+      // Strategy 1: find by icon text (most reliable — "add_2" is the + icon in Flow)
+      const iconMatch = allBtns.find(b => {
+        const txt = (b.innerText || b.textContent || '').trim().toLowerCase();
+        const r = b.getBoundingClientRect();
+        const nearInput = Math.abs((r.top + r.height / 2) - (inputRect.top + inputRect.height / 2)) < 100;
+        return nearInput && r.width > 15 && r.height > 15 &&
+               (txt === '+' || txt.includes('add_2') || txt.includes('add') || txt === 'create');
+      });
+      if (iconMatch) {
+        const r = iconMatch.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, strategy: 'icon' };
+      }
+
+      // Strategy 2: leftmost button near input
+      const leftBtns = allBtns
+        .filter(b => {
+          const r = b.getBoundingClientRect();
+          return r.width > 15 && r.height > 15 &&
+                 r.x < inputRect.x - 5 &&
+                 Math.abs((r.top + r.height / 2) - (inputRect.top + inputRect.height / 2)) < 100;
+        })
+        .sort((a, b) => a.getBoundingClientRect().x - b.getBoundingClientRect().x);
+
+      if (leftBtns.length > 0) {
+        const btn = leftBtns[0];
+        const r = btn.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, strategy: 'leftmost' };
+      }
+
+      // Strategy 3: any small square button before the text input (within 120px left)
+      const nearbyBtns = allBtns.filter(b => {
+        const r = b.getBoundingClientRect();
+        const vertAlign = Math.abs((r.top + r.height / 2) - (inputRect.top + inputRect.height / 2)) < 100;
+        const leftOfInput = r.x < inputRect.x + 10;
+        const smallSquare = r.width >= 24 && r.width <= 60 && r.height >= 24 && r.height <= 60;
+        return vertAlign && leftOfInput && smallSquare;
+      });
+
+      if (nearbyBtns.length > 0) {
+        // Pick leftmost one
+        nearbyBtns.sort((a, b) => a.getBoundingClientRect().x - b.getBoundingClientRect().x);
+        const r = nearbyBtns[0].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, strategy: 'nearby' };
+      }
+
+      return null;
+    }).catch(() => null);
+
+    if (!plusCoords) {
+      console.warn(`[FlowProxy:BROWSER] + button not found for ${slot} frame`);
+      return false;
+    }
+
+    // Step 2: Open the panel
+    await page.mouse.click(plusCoords.x, plusCoords.y);
+    await sleep(1200);
+
+    // Step 3: Ensure Video tab is selected in panel
+    try {
+      await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('button,[role="button"],[role="tab"]'));
+        const videoTab = els.find(el => {
+          const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+          const r = el.getBoundingClientRect();
+          return txt === 'video' && r.width > 20 && r.height > 20 && r.y > 600;
+        });
+        if (videoTab) videoTab.click();
+      });
+      await sleep(400);
+    } catch {}
+
+    // Step 4: Click Frames tab
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll('button,[role="button"],[role="tab"],span,div'));
+      const framesTab = els.find(el => {
+        const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+        return txt === 'frames' && el.offsetParent !== null;
+      });
+      if (framesTab) framesTab.click();
+    }).catch(() => {});
+    await sleep(600);
+
+    // Step 5: Use filechooser event to upload the file
+    // Listen BEFORE clicking slot so we don't miss the event
+    const fcPromise = page.waitForEvent('filechooser', { timeout: 8000 }).catch(() => null);
+
+    // Click the Start/End slot
+    await page.evaluate((slotName) => {
+      const allEls = Array.from(document.querySelectorAll('*'));
+      for (const el of allEls) {
+        const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+        if (txt === slotName && el.offsetParent !== null) {
+          const parent = el.closest('[class]') || el.parentElement;
+          if (parent) {
+            const uploadBtn = parent.querySelector('button,input[type="file"],[role="button"]');
+            if (uploadBtn) { uploadBtn.click(); return; }
+            parent.click(); return;
+          }
+        }
+      }
+      // Fallback: click first or last visible input[type=file]
+      const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+      const idx = slotName === 'end' ? inputs.length - 1 : 0;
+      if (inputs[idx]) inputs[idx].click();
+    }, slot).catch(() => {});
+
+    const fc = await fcPromise;
+    if (fc) {
+      await fc.setFiles(filePath);
+      console.log(`[FlowProxy:BROWSER] ✅ ${slot} frame uploaded`);
+      await sleep(2500);
+    } else {
+      // Fallback: direct setInputFiles
+      try {
+        await page.locator('input[type="file"]').first().setInputFiles(filePath, { timeout: 4000 });
+        console.log(`[FlowProxy:BROWSER] ✅ ${slot} frame set via fallback`);
+        await sleep(2000);
+      } catch { console.warn(`[FlowProxy:BROWSER] ⚠️ ${slot} frame skipped`); }
+    }
+
+    // Step 6: Close panel (click canvas area away from controls)
+    await page.mouse.click(300, 300);
+    await sleep(800);
+    return true;
+
+  } catch (err) {
+    console.warn(`[FlowProxy:BROWSER] ${slot} frame upload warning: ${err.message}`);
+    try { await page.keyboard.press('Escape'); await sleep(300); } catch {}
+    return false;
+  }
+  // NOTE: file cleanup is intentionally NOT done here.
+  // The queue worker passes file paths that persist across retries.
+  // Cleanup happens in browserGenerateVideo's finally block after all attempts.
+}
 // ── IMAGE generation (intercept approach — proven working) ────
 async function browserGenerateImage(prompt, options = {}) {
   if (!_initDone) await browserInit();
@@ -819,24 +1057,65 @@ async function browserGenerateVideo(prompt, options = {}) {
     }).catch(() => []);
     console.log(`[FlowProxy:BROWSER] Gallery buttons (${vidBtnsInfo.length}):`, JSON.stringify(vidBtnsInfo.slice(0, 20)));
 
-    // Step 4b: Detect current mode from pill (second-to-last toolbar button)
+    // Step 4b: Detect current mode from pill — CONTENT-based, not position-based.
+    // Positional detection breaks when failed videos add extra toolbar buttons.
+    // The model/mode pill always contains recognisable text: model names ("nano banana",
+    // "imagen", "veo"), aspect ratio ("crop_16_9", "panorama"), or mode ("video").
+    // We identify it by matching those known keywords regardless of toolbar length.
     const vidModeDetect = await genPage.evaluate(() => {
       const input = document.querySelector('[contenteditable="true"]') || document.querySelector('textarea');
       if (!input) return { mode: 'unknown', pillText: '', coords: null };
       const inputRect = input.getBoundingClientRect();
       const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+
+      // All visible buttons within 80px vertically of the input
       const toolbarBtns = allBtns
-        .filter(b => { const r=b.getBoundingClientRect(); return r.width>15&&r.height>15&&Math.abs((r.top+r.height/2)-(inputRect.top+inputRect.height/2))<80; })
-        .sort((a,b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-      const pill = toolbarBtns.length >= 2 ? toolbarBtns[toolbarBtns.length-2] : toolbarBtns[0];
-      const pillText = (pill?.innerText||pill?.getAttribute('aria-label')||'').toLowerCase();
+        .filter(b => {
+          const r = b.getBoundingClientRect();
+          return r.width > 15 && r.height > 15 &&
+                 Math.abs((r.top + r.height / 2) - (inputRect.top + inputRect.height / 2)) < 80;
+        })
+        .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+
+      // CONTENT-BASED pill detection: look for known model/mode keywords
+      const PILL_KEYWORDS = ['nano', 'banana', 'imagen', 'veo', 'crop_', 'panorama',
+                             'aspect', 'model', 'fast', 'ultra', 'flow', 'gemini'];
+      let pill = null;
+      for (const btn of toolbarBtns) {
+        const txt = (btn.innerText || btn.getAttribute('aria-label') || btn.textContent || '').toLowerCase();
+        if (PILL_KEYWORDS.some(kw => txt.includes(kw))) {
+          pill = btn;
+          break;
+        }
+      }
+      // Fallback: pill is typically the SECOND-to-last non-send button
+      // But only if we couldn't find it by content
+      if (!pill) {
+        // Exclude the send/generate button (rightmost or has arrow/send icons)
+        const nonSendBtns = toolbarBtns.filter(b => {
+          const txt = (b.innerText || b.textContent || '').toLowerCase();
+          // send button has arrow_forward, send, or is the absolute rightmost with no text
+          return !txt.includes('arrow_forward') && !txt.includes('create') && txt.trim().length > 0;
+        });
+        pill = nonSendBtns.length >= 2
+          ? nonSendBtns[nonSendBtns.length - 1]  // last non-send button = pill
+          : nonSendBtns[0];
+      }
+
+      const pillText = (pill?.innerText || pill?.getAttribute('aria-label') || '').toLowerCase();
       const pillRect = pill?.getBoundingClientRect();
       let mode = 'unknown';
       const fw = pillText.split('\n')[0].trim();
-      if (fw === 'video' || fw.includes('videocam') || fw.includes('video_cam')) mode='video';
-      else if (pillText.includes('crop_') || pillText.includes('panorama')) mode='image';
-      return { mode, pillText: pillText.slice(0,60), coords: pillRect ? {x:pillRect.x+pillRect.width/2, y:pillRect.y+pillRect.height/2} : null, toolbarCount: toolbarBtns.length };
-    }).catch(() => ({ mode:'unknown', pillText:'', coords:null }));
+      if (fw === 'video' || fw.includes('videocam') || fw.includes('video_cam')) mode = 'video';
+      else if (pillText.includes('crop_') || pillText.includes('panorama') || pillText.includes('nano') || pillText.includes('imagen')) mode = 'image';
+
+      return {
+        mode,
+        pillText: pillText.slice(0, 60),
+        coords: pillRect ? { x: pillRect.x + pillRect.width / 2, y: pillRect.y + pillRect.height / 2 } : null,
+        toolbarCount: toolbarBtns.length,
+      };
+    }).catch(() => ({ mode: 'unknown', pillText: '', coords: null }));
 
     console.log(`[FlowProxy:BROWSER] Mode detect: mode="${vidModeDetect.mode}" pill="${vidModeDetect.pillText}" toolbar=${vidModeDetect.toolbarCount}`);
 
@@ -1008,12 +1287,49 @@ async function browserGenerateVideo(prompt, options = {}) {
     // Even if mode confirm is uncertain, attempt generation — the interceptor
     // will catch the API call. If truly wrong mode, Google returns no video job.
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 4h: Upload Start / End frames BEFORE typing the prompt
+    //
+    // CRITICAL ORDER: frames must be attached BEFORE pressing Enter.
+    // Google Flow attaches frames to the generation request at trigger time.
+    // If frames are uploaded after Enter is pressed, they are ignored.
+    //
+    // Each upload: opens + panel → Video tab → Frames tab → clicks slot → fileChooser
+    // ─────────────────────────────────────────────────────────────────────────
+    if (options?.start_frame_path) {
+      console.log('[FlowProxy:BROWSER] Uploading START frame before prompt...');
+      await uploadVideoFrame(genPage, options.start_frame_path, 'start');
+      await sleep(500);
+    }
+    if (options?.end_frame_path) {
+      console.log('[FlowProxy:BROWSER] Uploading END frame before prompt...');
+      await uploadVideoFrame(genPage, options.end_frame_path, 'end');
+      await sleep(500);
+    }
+    if (options?.reference_image_path && !options?.start_frame_path) {
+      console.log('[FlowProxy:BROWSER] Uploading reference image for video...');
+      await uploadReferenceImage(genPage, options.reference_image_path);
+      await sleep(500);
+    }
+
         // ─────────────────────────────────────────────────────────────────────────
     // Step 5: Type the prompt
+    //
+    // ROOT CAUSE of "Timeout 30000ms exceeded" on el.type():
+    //   Playwright's elementHandle.type() checks actionability (visible, focused,
+    //   enabled) before EVERY keystroke. After a mode switch, React re-renders the
+    //   [contenteditable] element — even if visible, internal reconciliation briefly
+    //   detaches it. On a long prompt (300+ chars × 35ms = 10s+ of typing), React
+    //   re-renders mid-type, Playwright sees the element as stale → aborts with timeout.
+    //
+    // THE FIX: page.keyboard.type() instead of el.type().
+    //   keyboard.type() fires key events to the FOCUSED element — no per-keystroke
+    //   actionability check, no element reference required. React re-renders are
+    //   irrelevant as long as the input stays focused.
+    //   We click to focus first, then type using the keyboard API.
     // ─────────────────────────────────────────────────────────────────────────
     await sleep(800);
 
-    // Wait for input to be available (React may still be updating after mode switch)
     let inputEl = null;
     const inputSelectors = ['[contenteditable="true"]', 'textarea', '[role="textbox"]'];
 
@@ -1022,22 +1338,24 @@ async function browserGenerateVideo(prompt, options = {}) {
         await genPage.waitForSelector(sel, { state: 'visible', timeout: 8000 });
         const el = await genPage.$(sel);
         if (el && await el.isVisible().catch(() => false)) {
+          // Click to focus — do NOT use el.type() (causes React re-render timeouts)
           await el.click();
           await sleep(400);
-          // Clear existing text
+          // Clear any existing text
           await genPage.keyboard.press('Control+A');
           await sleep(100);
           await genPage.keyboard.press('Delete');
           await sleep(200);
-          // Type the prompt
-          await el.type(prompt, { delay: 35 });
+          // USE keyboard.type() — types to focused element, no element reference needed
+          // This is immune to React re-renders mid-type
+          await genPage.keyboard.type(prompt, { delay: 30 });
           await sleep(600);
           const typed = await el.evaluate(e => e.innerText || e.value || '').catch(() => '');
           console.log(`[FlowProxy:BROWSER] Video prompt typed: "${typed.slice(0, 50)}"`);
           inputEl = el;
           break;
         }
-      } catch(e) {
+      } catch (e) {
         console.warn(`[FlowProxy:BROWSER] Input selector "${sel}" failed: ${e.message}`);
       }
     }
@@ -1279,6 +1597,13 @@ async function browserGenerateVideo(prompt, options = {}) {
     await genPage.close().catch(() => {});
     await vidRelease(); // return slot to pool
     console.log(`[FlowProxy:BROWSER] Pool slot ${vidSlot} released`);
+
+    // Clean up temp frame files — done HERE (not in uploadVideoFrame) so that
+    // BullMQ retries can still find the files on attempt 2 and 3.
+    const fs = require('fs');
+    for (const fp of [options?.start_frame_path, options?.end_frame_path, options?.reference_image_path]) {
+      if (fp) { try { fs.unlinkSync(fp); console.log(`[FlowProxy:BROWSER] Cleaned up: ${require('path').basename(fp)}`); } catch {} }
+    }
   }
 }
 
