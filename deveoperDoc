@@ -1,0 +1,44 @@
+Act as a senior product strategist, UX architect, marketplace consultant, and full-stack solution expert for construction-tech platforms.
+
+I want to build a complete website and mobile app for a construction business platform focused on:
+- Building materials
+- New construction equipment
+- Equipment rental/sales
+- Online transactions
+- Supplier/vendor onboarding
+- Buyer/contractor ordering
+- Delivery/logistics tracking
+- RFQ/quotation flow
+- Project/site-based procurement
+
+Your task:
+1. Analyze top competitor websites and mobile apps in India and similar markets for construction materials, construction procurement, industrial supply, and construction equipment rental.
+2. List the best competitor websites/apps worth studying.
+3. Compare their features, UX, strengths, weaknesses, trust elements, and business model.
+4. Suggest the best features, UI patterns, and workflows to adopt.
+5. Recommend how to make my platform unique, easy to use, and better than competitors.
+6. Add missing but important features that a founder may forget.
+7. Propose the best website structure, mobile app structure, key modules, and admin panel.
+8. Suggest the best UI design style, color system, navigation, and user experience approach for contractors, builders, suppliers, and procurement users.
+9. Recommend the best practical tech stack for MVP and future scaling.
+
+Output format:
+- Executive summary
+- Top competitors
+- Competitor comparison table
+- Market gaps/opportunities
+- Recommended features
+- Website pages/modules
+- Mobile app modules
+- Admin/vendor modules
+- UX/UI recommendations
+- Unique differentiators
+- Recommended tech stack
+- MVP roadmap
+- Risks to avoid
+
+Important:
+- Make it construction-industry specific, not generic.
+- Focus on India-first realities like GST, logistics, contractors, fragmented suppliers, quotation flow, and trust-building.
+- Be practical and detailed.
+- Use tables wherever useful.
